@@ -30,8 +30,7 @@ jobs:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
       - name: В сборке нет секретного ключа
-        run: |
-          if grep -rqE 'sb_secret_|service_role' dist; then echo "Секретный ключ в сборке"; exit 1; fi
+        run: node ../scripts/check-dist.mjs dist
       - uses: actions/upload-pages-artifact@v3
         with:
           path: app/dist
