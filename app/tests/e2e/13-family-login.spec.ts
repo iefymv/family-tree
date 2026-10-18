@@ -79,3 +79,21 @@ test('семейный пароль: кого нет на дереве — на�
   expect(rel).toEqual([{ from_person: P.olga }]);
   await expect(page.locator('.welcome-card')).toBeVisible();
 });
+
+test('семейный пароль: опечатка в фамилии → «Это вы?» → вход на свою карточку; «Нет» ведёт к добавлению', async ({ page }, info) => {
+  const who = isPhone(info) ? { id: P.matvei, typed: 'Матвей Иваноф' } : { id: P.elena, typed: 'Елена Петрава' };
+  await page.goto('/');
+  await familyLogin(page, who.typed);
+  await expect(page.getByText('Это вы?')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Войти' })).toBeHidden();
+  await expectComfortable(page, '«Это вы?»');
+  await page.getByRole('button', { name: 'Нет, меня нет на дереве' }).click();
+  await expect(page.getByText('Вас ещё нет на дереве. Кем вы приходитесь родне?')).toBeVisible();
+  await page.getByRole('button', { name: 'Назад' }).click();
+  await page.getByRole('button', { name: 'Войти' }).click();
+  await page.locator(`.admin-pick[data-id="${who.id}"]`).click();
+  await treeReady(page);
+  await expect(page.locator(`.card.is-root[data-id="${who.id}"]`)).toBeVisible();
+  const { count } = await service().from('members').select('*', { count: 'exact', head: true }).eq('person_id', who.id);
+  expect(count).toBe(1);
+});

@@ -20,6 +20,8 @@ export interface SignInOptions {
   birthYear?: number;
   /** Человека нет на дереве: добавить его рядом с родственником и войти. */
   selfAdd?: SelfAdd;
+  /** «Это вы?» — выбран похожий человек с дерева. */
+  confirmPersonId?: string;
 }
 
 async function passwordSignIn(email: string, password: string) {
@@ -33,15 +35,16 @@ async function passwordSignIn(email: string, password: string) {
  */
 export async function signIn(nameInput: string, password: string, opts: SignInOptions = {}): Promise<Me> {
   const email = toEmail(nameInput);
-  let error = opts.selfAdd || opts.birthYear ? null : await passwordSignIn(email, password);
-  if (opts.selfAdd || opts.birthYear || (error && (error.code === 'invalid_credentials' || (error.status === 400 && !error.code)))) {
+  const familyOnly = !!(opts.selfAdd || opts.birthYear || opts.confirmPersonId);
+  let error = familyOnly ? null : await passwordSignIn(email, password);
+  if (familyOnly || (error && (error.code === 'invalid_credentials' || (error.status === 400 && !error.code)))) {
     let login: string;
     try {
       login = opts.selfAdd
         ? (await familySelfAdd(nameInput, password, opts.selfAdd)).login
-        : (await familyLogin(nameInput, password, opts.birthYear)).login;
+        : (await familyLogin(nameInput, password, opts.birthYear, opts.confirmPersonId)).login;
     } catch (e) {
-      if (e instanceof FamilyLoginError && e.status === 401) throw new SignInError('Неверное имя или пароль');
+      if (e instanceof FamilyLoginError && e.httpStatus === 401) throw new SignInError('Неверное имя или пароль');
       throw e;
     }
     error = await passwordSignIn(toEmail(login), password);

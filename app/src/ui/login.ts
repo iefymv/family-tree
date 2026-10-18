@@ -2,7 +2,7 @@
 // Семейный пароль: тёзкам — вопрос о годе рождения; кого нет на дереве — шаг «Кем вы приходитесь родне?»
 // с поиском родственника и добавлением себя рядом с ним.
 import { LoginError } from '../lib/auth';
-import { FamilyLoginError, searchRelatives, type LinkKind, type Relative } from '../lib/family-login';
+import { FamilyLoginError, searchRelatives, type Candidate, type LinkKind, type Relative } from '../lib/family-login';
 import { SignInError, signIn, type Me, type SignInOptions } from '../lib/session';
 import { isRetryable } from './wake';
 
@@ -127,6 +127,14 @@ export function showLogin(host: HTMLElement, wake: { run<T>(fn: () => Promise<T>
   for (const r of sexInputs) sexSet.appendChild(r.wrap);
   step2.append(linkTitle, names, find.wrap, results, chosenBox, kindSet, born.wrap, sexSet);
 
+  // ---------------------------------------------------------------- «Это вы?» — похожие на дереве
+  const stepConfirm = el('div', 'login-step');
+  stepConfirm.hidden = true;
+  const confirmList = el('ul', 'admin-results');
+  const notMe = el('button', 'btn btn-soft', 'Нет, меня нет на дереве');
+  notMe.type = 'button';
+  stepConfirm.append(el('p', 'login-sub login-link-title', 'Это вы?'), confirmList, notMe);
+
   const err = el('p', 'form-error');
   err.setAttribute('role', 'alert');
   err.hidden = true;
@@ -136,12 +144,12 @@ export function showLogin(host: HTMLElement, wake: { run<T>(fn: () => Promise<T>
   back.type = 'button';
   back.hidden = true;
 
-  card.append(mark, note, step1, step2, err, btn, back, hint);
+  card.append(mark, note, step1, stepConfirm, step2, err, btn, back, hint);
   screen.appendChild(card);
   host.appendChild(screen);
   name.input.focus(); // сразу, без rAF: иначе фокус перескакивает, пока человек уже печатает
 
-  let mode: 'login' | 'link' = 'login';
+  let mode: 'login' | 'confirm' | 'link' = 'login';
   let anchor: Relative | null = null;
   const idle = () => (mode === 'link' ? 'Добавить меня и войти' : 'Войти');
   const fail = (text: string, focus?: HTMLInputElement) => {
@@ -152,21 +160,27 @@ export function showLogin(host: HTMLElement, wake: { run<T>(fn: () => Promise<T>
 
   const setMode = (m: typeof mode) => {
     mode = m;
-    step1.hidden = m === 'link';
-    step2.hidden = m === 'login';
+    step1.hidden = m !== 'login';
+    stepConfirm.hidden = m !== 'confirm';
+    step2.hidden = m !== 'link';
     back.hidden = m === 'login';
-    hint.hidden = m === 'link';
-    note.hidden = m === 'link';
+    btn.hidden = m === 'confirm';
+    hint.hidden = m !== 'login';
+    note.hidden = m !== 'login';
     btn.textContent = idle();
     if (m === 'link') {
       const parts = name.input.value.trim().split(/\s+/);
       given.input.value ||= parts[0] ?? '';
       surname.input.value ||= parts.slice(1).join(' ');
       find.input.focus();
-    } else {
+    } else if (m === 'login') {
       name.input.focus();
     }
   };
+  notMe.addEventListener('click', () => {
+    err.hidden = true;
+    setMode('link');
+  });
   back.addEventListener('click', () => {
     err.hidden = true;
     setMode('login');
@@ -237,14 +251,41 @@ export function showLogin(host: HTMLElement, wake: { run<T>(fn: () => Promise<T>
           birthDate: born.input.value.trim() || undefined, sex,
         };
       }
-      btn.disabled = true;
-      btn.textContent = 'Входим…';
+      await attempt(opts);
+    });
+
+    const showCandidates = (list: Candidate[]) => {
+      confirmList.replaceChildren();
+      for (const c of list) {
+        const li = el('li');
+        const b = el('button', 'admin-pick');
+        b.type = 'button';
+        b.dataset.id = c.id;
+        b.appendChild(el('span', 'admin-pick-name', c.fio));
+        if (c.birth_year) b.appendChild(el('span', 'admin-pick-meta', `${c.birth_year} г. р.`));
+        b.addEventListener('click', () => {
+          err.hidden = true;
+          const y = year.input.value.trim();
+          void attempt({ confirmPersonId: c.id, ...(/^\d{4}$/.test(y) ? { birthYear: Number(y) } : {}) }, b);
+        });
+        li.appendChild(b);
+        confirmList.appendChild(li);
+      }
+      setMode('confirm');
+      confirmList.querySelector('button')?.focus();
+    };
+
+    async function attempt(opts: SignInOptions, from: HTMLButtonElement = btn) {
+      from.disabled = true;
+      if (from === btn) btn.textContent = 'Входим…';
       try {
         const me = await wake.run(() => signIn(name.input.value, pass.input.value, opts));
         screen.remove();
         resolve(me);
       } catch (e) {
-        if (e instanceof FamilyLoginError && e.need === 'birth_year' && mode === 'login') {
+        if (e instanceof FamilyLoginError && e.need === 'confirm' && e.candidates.length && mode === 'login') {
+          showCandidates(e.candidates);
+        } else if (e instanceof FamilyLoginError && e.need === 'birth_year' && mode === 'login') {
           year.wrap.hidden = false;
           fail(e.message, year.input);
         } else if (e instanceof FamilyLoginError && e.need === 'link' && mode === 'login') {
@@ -256,9 +297,9 @@ export function showLogin(host: HTMLElement, wake: { run<T>(fn: () => Promise<T>
           if (mode === 'login') pass.input.select();
         }
       } finally {
-        btn.disabled = false;
+        from.disabled = false;
         btn.textContent = idle();
       }
-    });
+    }
   });
 }

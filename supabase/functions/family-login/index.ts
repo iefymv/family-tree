@@ -3,7 +3,9 @@
 // Сначала проверяется семейный пароль (секрет FAMILY_PASSWORD, сравнение за постоянное время), потом всё остальное.
 // Варианты после верного пароля:
 //   {search: 'текст'}                         → {people: [{id, name, birth_year}]} — поиск родственника для привязки;
-//   {link: {anchor_id, kind}, given_name?, surname?, birth_date?, sex?} → добавить себя на дерево и войти.
+//   {link: {anchor_id, kind}, given_name?, surname?, birth_date?, sex?} → добавить себя на дерево и войти;
+//   {confirm_person_id}                       → «Это вы?» подтверждён: вход как при точном совпадении.
+// Точного совпадения нет, но есть похожие (опечатка в фамилии) → 409 {need:'confirm', candidates:[{id, fio, birth_year}]}.
 // Человек ищется по ТЕКУЩИМ полям карточки (имя + фамилия / девичья / варианты имени), вход — по person_id,
 // логин учётки (и её email) не меняется при правке карточки. Пароли не логируются и не возвращаются.
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
@@ -122,6 +124,47 @@ const hasBirth = (p: Person) => !!(p.birth_date_from || p.birth_date_to || p.bir
 
 function fullName(p: Person): string {
   return [p.surname, p.given_name, p.patronymic].filter(Boolean).join(' ') || 'Без имени';
+}
+
+// ---------------------------------------------------------------- похожие имена
+// «Ивашка» ≈ «Ивашко», «Сольпи» ≈ «Солпе»: мягкий/твёрдый знак выбрасываются, й→и, э→е, затем расстояние Левенштейна.
+const fold = (s: string) => norm(s).replace(/[ьъ]/g, '').replace(/й/g, 'и').replace(/э/g, 'е');
+
+function levenshtein(a: string, b: string): number {
+  if (a === b) return 0;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+/** Фамилии карточки: текущая, девичья, однословные варианты имени. */
+function surnamesOf(p: Person): string[] {
+  const out = [p.surname, p.maiden_name].filter((s): s is string => !!s);
+  if (Array.isArray(p.name_variants)) {
+    for (const v of p.name_variants) if (typeof v === 'string' && v.trim() && !v.trim().includes(' ')) out.push(v);
+  }
+  return out.map(fold).filter(Boolean);
+}
+
+/** Имя совпадает, фамилия близка (≤2 правки; для коротких фамилий ≤1) — в любом порядке слов. */
+function nearMatch(p: Person, input: string): boolean {
+  const given = fold(p.given_name ?? '');
+  if (!given) return false;
+  const words = input.split(' ');
+  if (words.length < 2) return false;
+  const orders: [string, string][] = [[words[0], words.slice(1).join(' ')], [words[words.length - 1], words.slice(0, -1).join(' ')]];
+  return orders.some(([g, sn]) => {
+    if (fold(g) !== given) return false;
+    const typed = fold(sn);
+    const limit = typed.length <= 4 ? 1 : 2;
+    return surnamesOf(p).some((s) => levenshtein(s, typed) <= limit);
+  });
 }
 
 // ---------------------------------------------------------------- разбор ввода
@@ -347,7 +390,18 @@ async function familyLogin(body: Record<string, unknown>, ip: string) {
   if (body.link !== undefined) return selfAdd(body, name);
 
   const y = year(body.birth_year);
-  let matches = (await livePeople()).filter((p) => nameKeys(p).has(input));
+  const people = await livePeople();
+
+  // «Это вы?» подтверждён: человек выбран из предложенных похожих (и должен им оставаться).
+  if (body.confirm_person_id !== undefined) {
+    const id = body.confirm_person_id;
+    if (typeof id !== 'string' || !UUID_RE.test(id)) throw new HttpError(400, 'Неверный выбор');
+    const p = people.find((x) => x.id === id);
+    if (!p || !(nameKeys(p).has(input) || nearMatch(p, input))) throw new HttpError(404, 'Этого человека нет среди похожих — попробуйте ещё раз');
+    return loginPerson(p);
+  }
+
+  let matches = people.filter((p) => nameKeys(p).has(input));
   if (y !== null) matches = matches.filter((p) => !hasBirth(p) ? matches.length === 1 : bornIn(p, y));
   if (matches.length > 1) {
     if (y === null) throw new HttpError(409, 'На дереве несколько человек с таким именем — укажите год рождения', { need: 'birth_year' });
@@ -358,6 +412,16 @@ async function familyLogin(body: Record<string, unknown>, ip: string) {
   // Карточку переименовали, а человек вводит прежнее имя — его семейная учётка по старому логину.
   const old = await memberBy('login', input);
   if (old && old.family_login) return useExisting(old);
+
+  // Опечатка или другое написание фамилии: предложить похожих, не создавая двойника.
+  let near = people.filter((p) => nearMatch(p, input));
+  if (y !== null) near = near.filter((p) => !hasBirth(p) || bornIn(p, y));
+  if (near.length) {
+    throw new HttpError(409, 'Это вы?', {
+      need: 'confirm',
+      candidates: near.slice(0, 5).map((p) => ({ id: p.id, fio: fullName(p), birth_year: birthYear(p) })),
+    });
+  }
   throw new HttpError(404, 'Вас ещё нет на дереве. Кем вы приходитесь родне?', { need: 'link' });
 }
 

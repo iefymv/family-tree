@@ -233,6 +233,44 @@ describe('family-login', () => {
     assert.equal(await count('members', 'person_id', newId), 1);
   });
 
+  test('похожая фамилия («Ивашка» вместо «Ивашко», мягкий знак): «Это вы?» → подтверждение → вход на ту карточку', async () => {
+    const id = await person('Арсений', S('Ивашко'), { birth_date_text: '1961', birth_date_from: '1961-01-01', birth_date_to: '1961-12-31' });
+    const other = await person('Глафира', S('Ивашко'));
+    const typed = `Арсений ${S('Ивашка')}`;
+
+    const denied = await family({ name: typed, password: 'не-тот' });
+    assert.equal(denied.status, 401);
+    assert.equal(denied.json.candidates, undefined, 'без верного пароля — никаких кандидатов');
+
+    const ask = await family({ name: typed, password: FAMILY });
+    assert.equal(ask.status, 409, JSON.stringify(ask.json));
+    assert.equal(ask.json.need, 'confirm');
+    assert.deepEqual(ask.json.candidates, [{ id, fio: `${S('Ивашко')} Арсений`, birth_year: 1961 }]);
+    assert.equal(await memberOf(id), null, 'до подтверждения вход не создаётся');
+
+    // Год не совпал — похожий не предлагается.
+    const wrongYear = await family({ name: typed, password: FAMILY, birth_year: 1990 });
+    assert.equal(wrongYear.status, 404);
+    assert.equal(wrongYear.json.need, 'link');
+    // Слишком далеко (3 правки) — тоже нет.
+    assert.equal((await family({ name: `Арсений ${S('Ивонька')}`, password: FAMILY })).status, 404);
+    // Подтвердить чужого (не похожего на введённое имя) нельзя.
+    const bad = await family({ name: typed, password: FAMILY, confirm_person_id: other });
+    assert.equal(bad.status, 404);
+
+    const ok = await family({ name: typed, password: FAMILY, confirm_person_id: id });
+    assert.equal(ok.status, 201, JSON.stringify(ok.json));
+    assert.equal(ok.json.login, `арсений ${S('ивашко')}`);
+    assert.equal(await signInAs(String(ok.json.login)), id);
+    assert.equal(await count('members', 'person_id', id), 1);
+
+    // ь/й/э: карточка «Солпе», вводят «Сольпи».
+    const soft = await person('Нонна', S('Солпе'));
+    const r = await family({ name: `${S('Сольпи')} Нонна`, password: FAMILY });
+    assert.equal(r.status, 409, JSON.stringify(r.json));
+    assert.deepEqual((r.json.candidates as { id: string }[]).map((c) => c.id), [soft]);
+  });
+
   test('ограничение попыток: 10 неверных паролей за 15 минут — 429, даже с верным', async () => {
     const ip = `${IP}-flood`;
     for (let i = 0; i < 10; i++) {
