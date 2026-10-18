@@ -1,0 +1,17 @@
+# Семейные данные и служебное — никогда в репозиторий
+.omc/
+private/
+.env
+.env.*
+!.env.example
+*.jpg
+*.jpeg
+*.png
+*.heic
+*.ged
+node_modules/
+dist/
+supabase/.temp/
+playwright-report/
+test-results/
+.DS_Store

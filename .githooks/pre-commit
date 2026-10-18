@@ -1,0 +1,15 @@
+#!/bin/sh
+# Блокирует картинки, приватные файлы и реальные имена в индексируемых файлах.
+set -e
+bad=$(git diff --cached --name-only --diff-filter=ACM | grep -Ei '\.(jpe?g|png|heic|ged)$|^private/|^\.omc/|(^|/)\.env($|\.)' | grep -v '^\.env\.example$' || true)
+if [ -n "$bad" ]; then echo "pre-commit: запрещённые файлы:"; echo "$bad"; exit 1; fi
+files=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$files" ] && exit 0
+tmp=$(mktemp); for f in $files; do git show ":$f" >> "$tmp" 2>/dev/null || true; done
+node --input-type=module -e "
+import { loadStoplist, findHits } from './scripts/check-stoplist.mjs';
+import { readFileSync } from 'node:fs';
+const hits = findHits(readFileSync('$tmp','utf8'), loadStoplist());
+if (hits.length) { console.error('pre-commit: реальные имена из стоп-листа в файлах ('+hits.length+' шт.). Используйте вымышленных Ивановых.'); process.exit(1); }
+" || { rm -f "$tmp"; exit 1; }
+rm -f "$tmp"
