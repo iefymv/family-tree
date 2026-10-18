@@ -6,16 +6,16 @@ const URL = 'https://example.test/family/';
 
 describe('приглашение', () => {
   it('с именем отправителя; без имени — просто «Привет!»', () => {
-    expect(inviteText(URL, '', 'Анна').startsWith('Привет! Это Анна. Мы всей семьёй собираем наше семейное дерево')).toBe(true);
-    expect(inviteText(URL, '', '  ').startsWith('Привет! Мы всей семьёй')).toBe(true);
+    expect(inviteText(URL, '', 'Анна').startsWith('Привет! 👋 Это Анна.\n\n🌳 Мы всей семьёй собираем наше семейное дерево')).toBe(true);
+    expect(inviteText(URL, '', '  ').startsWith('Привет! 👋\n\n🌳 Мы всей семьёй')).toBe(true);
   });
   it('текст по умолчанию — без пароля', () => {
     const t = inviteText(URL);
-    expect(t.startsWith('Привет! Мы всей семьёй собираем наше семейное дерево — родных, фото, даты и истории, чтобы ничего не забылось и дети знали, откуда мы.\n')).toBe(true);
-    expect(t).toContain(`1. Открой ссылку: ${URL}\n`);
-    expect(t).toContain(`3. Введи общий семейный пароль — ${PASSWORD_LATER}\n`);
-    expect(t.endsWith('Чем больше каждый допишет, тем полнее будет дерево!')).toBe(true);
-    expect(t.split('\n')).toHaveLength(12);
+    expect(t).toContain('🌳 Мы всей семьёй собираем наше семейное дерево — родных, фото, даты и истории, чтобы ничего не забылось и дети знали, откуда мы.\n\n');
+    expect(t).toContain(`1️⃣ Открой ссылку: ${URL}\n`);
+    expect(t).toContain(`3️⃣ Введи общий семейный пароль — ${PASSWORD_LATER}\n`);
+    expect(t.endsWith('❤️ Чем больше каждый допишет, тем полнее будет дерево!')).toBe(true);
+    expect(t.split('\n\n')).toHaveLength(6);
   });
   it('пароль попадает только если вписан', () => {
     expect(passwordLine('')).toBe(PASSWORD_LATER);
