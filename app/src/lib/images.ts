@@ -55,10 +55,10 @@ export interface UploadOptions {
   caption?: string | null;
   source?: string | null;
   /** MIME основного файла; по умолчанию image/jpeg (после prepareImage). */
-  mime?: 'image/jpeg' | 'image/png' | 'image/webp';
+  mime?: 'image/jpeg' | 'image/png' | 'image/webp' | 'application/pdf';
 }
 
-const EXT: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+const EXT: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'application/pdf': 'pdf' };
 
 /**
  * Загружает готовые файлы (upsert:false — ничего не перезаписывается) и пишет строку documents.
@@ -85,6 +85,14 @@ export async function uploadPrepared(personId: string, files: { full: Blob; thum
 /** Фото из <input type=file>: сжать, сделать миниатюру, загрузить. */
 export async function uploadPhoto(personId: string, file: Blob & { name?: string }, opts: Omit<UploadOptions, 'mime'> = {}): Promise<DocumentRow> {
   return uploadPrepared(personId, await prepareImage(file), opts);
+}
+
+/** Документ из <input type=file>: картинка — как фото (сжать + миниатюра), PDF — как есть. */
+export async function uploadDocument(personId: string, file: Blob & { name?: string }, opts: Omit<UploadOptions, 'mime'> = {}): Promise<DocumentRow> {
+  if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name ?? '')) {
+    return uploadPrepared(personId, { full: file }, { ...opts, mime: 'application/pdf' });
+  }
+  return uploadPhoto(personId, file, opts);
 }
 
 export async function setPortrait(personId: string, documentId: string | null): Promise<PersonRow | null> {

@@ -72,7 +72,10 @@ export function createAddDialog(host: HTMLElement) {
   const surname = field('Фамилия', 'surname', 'text', true);
   const given = field('Имя', 'given', 'text', true);
   const patronymic = field('Отчество', 'patronymic');
-  const birth = field('Дата рождения', 'birth', 'date');
+  // Дата текстом в свободной форме: «12.03.1955», «1919», «20–25 мая 1919» (без mm/dd/yyyy браузера).
+  const birth = field('Дата рождения', 'birth');
+  birth.input.placeholder = 'например, 12.03.1955 или 1919';
+  birth.input.inputMode = 'text';
   const place = field('Место рождения', 'place');
   const row = document.createElement('div');
   row.className = 'field-row';
@@ -136,7 +139,7 @@ export function createAddDialog(host: HTMLElement) {
       surname: surname.input.value.trim(),
       given: given.input.value.trim(),
       patronymic: patronymic.input.value.trim(),
-      birthDate: birth.input.value || undefined,
+      birthDate: birth.input.value.trim() || undefined,
       birthPlace: place.input.value.trim() || undefined,
     });
   });
@@ -158,7 +161,7 @@ export function createAddDialog(host: HTMLElement) {
       place.input.value = '';
       syncByGender();
       dlg.showModal();
-      requestAnimationFrame(() => given.input.focus());
+      given.input.focus(); // сразу, без rAF: иначе фокус перескакивает, пока человек уже печатает
       return new Promise((r) => (resolve = r));
     },
   };

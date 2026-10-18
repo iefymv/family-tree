@@ -5,8 +5,10 @@ import type { FamilyData, Gender, Person } from '../tree/graph';
 export type PhotoKind = { kind: 'portrait' } | { kind: 'initials' } | { kind: 'upload'; url: string };
 
 export interface LifeEvent {
-  /** ISO-дата `YYYY-MM-DD` или только год `YYYY`. */
+  /** ISO-дата `YYYY-MM-DD`, только год `YYYY` или пусто (известно лишь место). */
   date: string;
+  /** Дата как написана в семье («20–25 мая 1919») — показывается вместо разобранной. */
+  label?: string;
   place?: string;
 }
 
@@ -14,6 +16,16 @@ export interface DocTile {
   title: string;
   year?: number;
   kind: 'certificate' | 'letter' | 'photo' | 'diploma';
+  /** Только у загруженных: id строки documents, путь в хранилище, MIME, ссылка на миниатюру. */
+  id?: string;
+  path?: string;
+  mime?: string | null;
+  thumb?: string;
+}
+
+export interface FactItem {
+  id: string;
+  text: string;
 }
 
 export interface Profile {
@@ -26,10 +38,14 @@ export interface Profile {
   birth?: LifeEvent;
   death?: LifeEvent;
   occupation?: string;
-  facts: string[];
+  facts: FactItem[];
   story?: string;
   docs: DocTile[];
   photo: PhotoKind;
+  /** «Нужно уточнить» — данные неточные. */
+  needsCheck?: boolean;
+  /** Кто добавил человека на дерево (подпись участника). */
+  addedBy?: string;
 }
 
 export const TODAY_YEAR = 2026;
@@ -37,7 +53,7 @@ export const TODAY_YEAR = 2026;
 export const fullName = (p: Pick<Profile, 'surname' | 'given' | 'patronymic'>): string =>
   [p.surname, p.given, p.patronymic].filter(Boolean).join(' ');
 
-export const yearOf = (e?: LifeEvent): number | undefined => (e ? Number(e.date.slice(0, 4)) : undefined);
+export const yearOf = (e?: LifeEvent): number | undefined => (e && /^\d{4}/.test(e.date) ? Number(e.date.slice(0, 4)) : undefined);
 
 // ——— случайность от id ———
 function hash(s: string): number {
@@ -310,7 +326,7 @@ export function buildDemoProfiles(family: FamilyData, base = 1897): Map<string, 
     else if (ageNow < 17) job = p.gender === 'female' ? 'Школьница' : 'Школьник';
     else if (/Школ/.test(job)) job = p.gender === 'female' ? 'Студентка' : pick(r, jobs.slice(0, 4));
 
-    const facts = [...FACTS[e]].sort(() => r() - 0.5).slice(0, 2 + Math.floor(r() * 2));
+    const facts = [...FACTS[e]].sort(() => r() - 0.5).slice(0, 2 + Math.floor(r() * 2)).map((text, i) => ({ id: `demo-fact-${p.id}-${i}`, text }));
     const docs = DOCS[e].slice(0, 2 + Math.floor(r() * (DOCS[e].length - 1))).map((d) => ({ ...d, year: y + (DOC_AGE[d.title] ?? 20) })).filter((d) => d.year <= TODAY_YEAR);
 
     const prof: Profile = {

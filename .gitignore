@@ -16,3 +16,5 @@ playwright-report/
 test-results/
 .DS_Store
 supabase/.branches/
+dist-e2e/
+.env.showcase

@@ -305,3 +305,40 @@ export async function revert(editId: number, force = false): Promise<RevertResul
   if (error) fail(error);
   return data as RevertResult;
 }
+
+// ---------------------------------------------------------------- для экрана дерева
+
+/** Пути файлов портретов по id документов (для миниатюр на дереве). */
+export async function loadPortraitPaths(documentIds: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const ids = [...new Set(documentIds)];
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data, error } = await db().from('documents_live').select('id, storage_path').in('id', ids.slice(i, i + 200));
+    if (error) fail(error);
+    for (const d of (data ?? []) as { id: string; storage_path: string }[]) out.set(d.id, d.storage_path);
+  }
+  return out;
+}
+
+/** Подписи участников (кто добавил / правил): user_id → display_name. login не читается (column grants). */
+export async function loadMemberNames(): Promise<Map<string, string>> {
+  const { data, error } = await db().from('members').select('user_id, display_name');
+  if (error) fail(error);
+  return new Map(((data ?? []) as { user_id: string; display_name: string }[]).map((m) => [m.user_id, m.display_name]));
+}
+
+/** Второй родитель для ребёнка, у которого известен один (заполнение «Неизвестно» у остальных детей). */
+export async function addParentRelation(parentId: string, childId: string): Promise<string> {
+  const { data, error } = await db().from('relations')
+    .insert({ kind: 'parent', from_person: uuid(parentId), to_person: uuid(childId), parent_type: 'biological' })
+    .select('id').single();
+  if (error) fail(error);
+  return (data as { id: string }).id;
+}
+
+/** Мягко удалённые люди (для «Восстановить» у админа). Удалённые строки RLS участникам отдаёт — для истории. */
+export async function listDeletedPeople(): Promise<PersonRow[]> {
+  const { data, error } = await db().from('people').select('*').not('deleted_at', 'is', null).order('deleted_at', { ascending: false }).limit(100);
+  if (error) fail(error);
+  return (data ?? []) as PersonRow[];
+}

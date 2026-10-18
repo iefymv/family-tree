@@ -1,6 +1,7 @@
 // Карточка человека: нижняя шторка на телефоне (тянется пальцем), боковая панель на компьютере.
 // Все данные — через textContent; innerHTML только для статичных иконок.
-import { fullName, yearOf, TODAY_YEAR, type DocTile, type Profile } from '../demo/profiles';
+import { fullName, yearOf, TODAY_YEAR, type DocTile, type LifeEvent, type Profile } from '../demo/profiles';
+import type { HistoryItem } from '../app/history-format';
 import { initials, initialsGradient } from '../tree/portrait';
 import { photoURL } from '../tree/render';
 import type { AddKind } from '../tree/mutate';
@@ -10,6 +11,13 @@ const MONTHS = ['января', 'февраля', 'марта', 'апреля', 
 export function longDate(date: string): string {
   const [y, m, d] = date.split('-');
   return m && d ? `${+d} ${MONTHS[+m - 1]} ${y}` : `${y} год`;
+}
+
+/** Дата события в карточке: как написана в семье, иначе разобранная. */
+export function eventDate(e?: LifeEvent): string | null {
+  if (!e) return null;
+  if (e.label) return e.label;
+  return e.date ? longDate(e.date) : null;
 }
 
 export function yearsWord(n: number): string {
@@ -28,6 +36,9 @@ const ICONS = {
   edit: '<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4Z"/><path d="M13.5 6.5l4 4"/></svg>',
   camera: '<svg viewBox="0 0 24 24"><path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.8l1.4-2h4.6l1.4 2h1.8A2.5 2.5 0 0 1 20 8.5v8a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 16.5v-8Z"/><circle cx="12" cy="12.5" r="3.5"/></svg>',
   close: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  undo: '<svg viewBox="0 0 24 24"><path d="M9 7 4 12l5 5"/><path d="M4 12h10a6 6 0 0 1 0 12h-2" transform="translate(0 -6)"/></svg>',
+  trash: '<svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 13h8l1-13"/></svg>',
+  unlink: '<svg viewBox="0 0 24 24"><path d="M10 14l-2 2a3 3 0 0 1-4-4l2-2M14 10l2-2a3 3 0 0 1 4 4l-2 2M8 8 6 6M18 18l-2-2"/></svg>',
   plus: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
   leaf: '<svg viewBox="0 0 24 24"><path d="M5 19c0-8 5-13 14-14-1 9-6 14-14 14Z"/><path d="M5 19l7-7"/></svg>',
   certificate: '<svg viewBox="0 0 48 48"><rect x="9" y="7" width="30" height="34" rx="3"/><path d="M15 15h18M15 21h18M15 27h10"/><circle cx="31" cy="32" r="4"/></svg>',
@@ -46,6 +57,8 @@ const ADD_ITEMS: [AddKind, string][] = [
 export interface RelativeGroup {
   title: string;
   people: { profile: Profile; relation?: string }[];
+  /** Прямая связь (родитель, супруг, ребёнок) — её можно убрать. У братьев и сестёр связь через родителей. */
+  direct?: boolean;
 }
 
 export interface SheetContext {
@@ -54,6 +67,10 @@ export interface SheetContext {
   relation?: string;
   can: Record<AddKind, boolean>;
   relatives: RelativeGroup[];
+  /** Вошедший — администратор: откат правок, удаление человека. */
+  admin: boolean;
+  /** Данные с сервера (а не демо): документы, история. */
+  live: boolean;
 }
 
 export interface SheetHandlers {
@@ -62,6 +79,13 @@ export interface SheetHandlers {
   onPhoto(id: string, file: File): void;
   onAdd(id: string, kind: AddKind): void;
   onNavigate(id: string): void;
+  onUploadDocs(id: string, files: File[]): void;
+  onOpenDoc(id: string, doc: DocTile): void;
+  onRemoveFact(id: string, factId: string): void;
+  onRemoveRelation(id: string, otherId: string): void;
+  onDeletePerson(id: string): void;
+  loadHistory(id: string): Promise<HistoryItem[]>;
+  onRevert(id: string, item: HistoryItem): void;
 }
 
 export interface Sheet {
@@ -72,12 +96,13 @@ export interface Sheet {
   freeArea(): { x: number; y: number; w: number; h: number };
 }
 
-type Tab = 'info' | 'tree' | 'gallery' | 'docs';
+type Tab = 'info' | 'tree' | 'gallery' | 'docs' | 'history';
 const TABS: [Tab, string][] = [
   ['info', 'Инфо'],
   ['tree', 'Дерево'],
   ['gallery', 'Галерея'],
   ['docs', 'Документы'],
+  ['history', 'История'],
 ];
 
 function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] {
@@ -120,12 +145,23 @@ const INITIAL_BG = (i: number) =>
     ['#C47F75', '#8E4B4B'],
   ][i].join(', ');
 
-function docTile(d: DocTile): HTMLElement {
-  const t = h('figure', `doc doc-${d.kind}`);
-  const paper = h('div', 'doc-paper');
-  paper.appendChild(icon(d.kind, 'doc-ico'));
+function docTile(d: DocTile, onOpen?: () => void): HTMLElement {
+  const t = h(onOpen ? 'button' : 'figure', `doc doc-${d.kind}`);
+  if (t instanceof HTMLButtonElement) {
+    t.type = 'button';
+    t.setAttribute('aria-label', `Открыть: ${d.title}`);
+    t.addEventListener('click', () => onOpen?.());
+  }
+  const paper = h('div', `doc-paper${d.thumb ? ' has-thumb' : ''}`);
+  if (d.thumb) {
+    const img = h('img', 'doc-thumb');
+    img.src = d.thumb;
+    img.alt = '';
+    img.loading = 'lazy';
+    paper.appendChild(img);
+  } else paper.appendChild(icon(d.kind, 'doc-ico'));
   t.appendChild(paper);
-  const cap = h('figcaption');
+  const cap = h('span', 'doc-cap');
   cap.appendChild(h('span', 'doc-title', d.title));
   if (d.year) cap.appendChild(h('span', 'doc-year', String(d.year)));
   t.appendChild(cap);
@@ -154,7 +190,15 @@ export function createSheet(host: HTMLElement, handlers: SheetHandlers): Sheet {
   fileInput.type = 'file';
   fileInput.accept = 'image/*';
   fileInput.hidden = true;
+  fileInput.setAttribute('data-testid', 'photo-input');
   root.appendChild(fileInput);
+  const docInput = h('input');
+  docInput.type = 'file';
+  docInput.accept = 'image/*,application/pdf';
+  docInput.multiple = true;
+  docInput.hidden = true;
+  docInput.setAttribute('data-testid', 'doc-input');
+  root.appendChild(docInput);
 
   let current: Profile | null = null;
   let full = false;
@@ -173,6 +217,11 @@ export function createSheet(host: HTMLElement, handlers: SheetHandlers): Sheet {
     const f = fileInput.files?.[0];
     if (f && current) handlers.onPhoto(current.id, f);
     fileInput.value = '';
+  });
+  docInput.addEventListener('change', () => {
+    const fs = [...(docInput.files ?? [])];
+    if (fs.length && current) handlers.onUploadDocs(current.id, fs);
+    docInput.value = '';
   });
   root.addEventListener('keydown', (ev) => {
     if (ev.key === 'Escape') handlers.onClose();
@@ -220,6 +269,17 @@ export function createSheet(host: HTMLElement, handlers: SheetHandlers): Sheet {
 
   let tab: Tab = 'info';
 
+  function smallBtn(label: string, ico: keyof typeof ICONS, onClick: () => void, cls = 'btn-mini'): HTMLButtonElement {
+    const b = h('button', `btn ${cls}`);
+    b.type = 'button';
+    b.append(icon(ico), h('span', '', label));
+    b.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      onClick();
+    });
+    return b;
+  }
+
   function render(p: Profile, ctx: SheetContext) {
     scroll.replaceChildren();
     const she = p.gender === 'female';
@@ -243,6 +303,7 @@ export function createSheet(host: HTMLElement, handlers: SheetHandlers): Sheet {
     root.setAttribute('aria-labelledby', 'sheet-name');
     const sub = ctx.isRoot ? 'Это вы' : ctx.relation;
     if (sub) hero.appendChild(h('p', `hero-rel${ctx.isRoot ? ' is-you' : ''}`, sub));
+    if (p.needsCheck) hero.appendChild(h('p', 'needs-check', 'Нужно уточнить'));
 
     const actions = h('div', 'hero-actions');
     const edit = h('button', 'btn btn-primary');
@@ -268,7 +329,6 @@ export function createSheet(host: HTMLElement, handlers: SheetHandlers): Sheet {
         tab = id;
         render(p, ctx);
         if (!isSide()) setFull(true);
-        scroll.querySelector('.tab.is-active')?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
       });
       tabs.appendChild(t);
     }
@@ -286,16 +346,20 @@ export function createSheet(host: HTMLElement, handlers: SheetHandlers): Sheet {
         r.append(h('dt', '', label), h('dd', muted ? 'muted' : '', value));
         dl.appendChild(r);
       };
-      row('Дата рождения', p.birth ? longDate(p.birth.date) : 'неизвестна', !p.birth);
+      const bd = eventDate(p.birth);
+      row('Дата рождения', bd ?? 'неизвестна', !bd);
       row('Место рождения', p.birth?.place ?? 'неизвестно', !p.birth?.place);
       if (p.death) {
-        row('Дата смерти', longDate(p.death.date));
+        const dd = eventDate(p.death);
+        row('Дата смерти', dd ?? 'неизвестна', !dd);
         row('Место смерти', p.death.place ?? 'неизвестно', !p.death.place);
       } else row('Дата смерти', she ? 'Жива' : 'Жив', true);
       const by = yearOf(p.birth);
-      if (by) row(p.death ? 'Прожил'.replace('Прожил', she ? 'Прожила' : 'Прожил') : 'Возраст', yearsWord((yearOf(p.death) ?? TODAY_YEAR) - by));
+      const dy = yearOf(p.death);
+      if (by && (!p.death || dy)) row(p.death ? (she ? 'Прожила' : 'Прожил') : 'Возраст', yearsWord((dy ?? TODAY_YEAR) - by));
       if (p.maidenName) row('Девичья фамилия', p.maidenName);
       row(p.death ? (she ? 'Чем занималась' : 'Чем занимался') : 'Чем занимается', p.occupation ?? 'не указано', !p.occupation);
+      if (p.addedBy) row('Добавил(а) на дерево', p.addedBy);
       body.appendChild(dl);
 
       const fSec = section('Интересные факты');
@@ -303,7 +367,8 @@ export function createSheet(host: HTMLElement, handlers: SheetHandlers): Sheet {
         const ul = h('ul', 'fact-list');
         for (const f of p.facts) {
           const li = h('li');
-          li.append(icon('leaf', 'fact-ico'), h('span', '', f));
+          li.append(icon('leaf', 'fact-ico'), h('span', 'fact-text', f.text));
+          li.appendChild(smallBtn('Убрать факт', 'trash', () => handlers.onRemoveFact(p.id, f.id)));
           ul.appendChild(li);
         }
         fSec.appendChild(ul);
@@ -313,7 +378,7 @@ export function createSheet(host: HTMLElement, handlers: SheetHandlers): Sheet {
       const sSec = section('История жизни');
       if (p.story) {
         const art = h('div', 'story');
-        for (const para of p.story.split('\n\n')) art.appendChild(h('p', '', para));
+        for (const para of p.story.split(/\n\s*\n/)) art.appendChild(h('p', '', para));
         sSec.appendChild(art);
       } else sSec.appendChild(h('p', 'empty-note', 'История ещё не написана — её можно добавить через «Редактировать».'));
       body.appendChild(sSec);
@@ -323,7 +388,7 @@ export function createSheet(host: HTMLElement, handlers: SheetHandlers): Sheet {
         const sec = section(g.title, String(g.people.length));
         const ul = h('ul', 'rel-list');
         for (const r of g.people) {
-          const li = h('li');
+          const li = h('li', 'rel-item');
           const b = h('button', 'rel-row');
           b.type = 'button';
           b.appendChild(avatarEl(r.profile, 'rel-av'));
@@ -336,6 +401,11 @@ export function createSheet(host: HTMLElement, handlers: SheetHandlers): Sheet {
           b.appendChild(tx);
           b.addEventListener('click', () => handlers.onNavigate(r.profile.id));
           li.appendChild(b);
+          if (g.direct) {
+            const un = smallBtn('Убрать связь', 'unlink', () => handlers.onRemoveRelation(p.id, r.profile.id));
+            un.setAttribute('aria-label', `Убрать связь: ${fullName(r.profile)}`);
+            li.appendChild(un);
+          }
           ul.appendChild(li);
         }
         sec.appendChild(ul);
@@ -360,24 +430,82 @@ export function createSheet(host: HTMLElement, handlers: SheetHandlers): Sheet {
       main.appendChild(avatarEl(p, 'g-img'));
       main.appendChild(h('figcaption', '', 'Главное фото'));
       grid.appendChild(main);
+      for (const d of p.docs.filter((x) => x.kind === 'photo' && x.thumb)) {
+        const b = h('button', 'g-item g-photo');
+        b.type = 'button';
+        b.setAttribute('aria-label', `Открыть: ${d.title}`);
+        const img = h('img', 'g-img');
+        img.src = d.thumb!;
+        img.alt = '';
+        img.loading = 'lazy';
+        b.appendChild(img);
+        b.addEventListener('click', () => handlers.onOpenDoc(p.id, d));
+        grid.appendChild(b);
+      }
       const add = h('button', 'g-item g-add');
       add.type = 'button';
       add.append(icon('plus', 'g-add-ico'), h('span', '', 'Добавить фото'));
       add.addEventListener('click', () => fileInput.click());
       grid.appendChild(add);
       body.appendChild(grid);
-      body.appendChild(h('p', 'empty-note', 'Здесь будут семейные фотографии. Пока можно поменять главное фото — оно сразу появится на дереве.'));
-    } else {
+      body.appendChild(h('p', 'empty-note', 'Новое фото становится главным — оно сразу появится на дереве.'));
+    } else if (tab === 'docs') {
       const docs = h('div', 'doc-grid');
-      for (const d of p.docs) docs.appendChild(docTile(d));
+      for (const d of p.docs) docs.appendChild(docTile(d, d.path ? () => handlers.onOpenDoc(p.id, d) : undefined));
       const addDoc = h('button', 'doc doc-add');
       addDoc.type = 'button';
       addDoc.append(icon('plus', 'doc-add-ico'), h('span', '', 'Добавить'));
-      addDoc.addEventListener('click', () => handlers.onEdit(p.id));
+      addDoc.setAttribute('aria-label', 'Добавить документ');
+      addDoc.addEventListener('click', () => docInput.click());
       docs.appendChild(addDoc);
       body.appendChild(docs);
-      if (!p.docs.length) body.appendChild(h('p', 'empty-note', 'Документов пока нет: метрики, письма, дипломы можно будет прикрепить сюда.'));
+      if (!p.docs.length) body.appendChild(h('p', 'empty-note', 'Документов пока нет: метрики, письма, дипломы можно прикрепить сюда — фото или PDF.'));
+    } else {
+      const list = h('ol', 'history-list');
+      list.setAttribute('aria-busy', 'true');
+      list.appendChild(h('li', 'empty-note', 'Загружаем историю…'));
+      body.appendChild(list);
+      const want = p.id;
+      handlers.loadHistory(p.id).then(
+        (items) => {
+          if (current?.id !== want || tab !== 'history') return;
+          list.replaceChildren();
+          list.removeAttribute('aria-busy');
+          if (!items.length) list.appendChild(h('li', 'empty-note', 'Правок пока не было.'));
+          for (const it of items) list.appendChild(historyRow(p, it, ctx));
+        },
+        (e: unknown) => {
+          if (current?.id !== want || tab !== 'history') return;
+          list.replaceChildren(h('li', 'empty-note', `Не удалось загрузить историю: ${(e as Error).message}`));
+        },
+      );
+      const danger = section('Удаление');
+      if (ctx.admin) {
+        const del = smallBtn('Удалить человека', 'trash', () => handlers.onDeletePerson(p.id), 'btn-danger');
+        del.dataset.action = 'delete-person';
+        danger.appendChild(del);
+        danger.appendChild(h('p', 'hint', 'Человек пропадёт с дерева вместе со своими связями. Вернуть можно кнопкой «Восстановить».'));
+      } else danger.appendChild(h('p', 'empty-note', 'Удалить человека может только администратор. Связь или факт можно убрать самому — на вкладках «Дерево» и «Инфо».'));
+      body.appendChild(danger);
     }
+  }
+
+  function historyRow(p: Profile, it: HistoryItem, ctx: SheetContext): HTMLElement {
+    const li = h('li', 'h-item');
+    li.dataset.editId = String(it.id);
+    li.appendChild(h('p', 'h-title', it.title));
+    li.appendChild(h('p', 'h-meta', `${it.who} · ${it.when}`));
+    if (it.changes.length) {
+      const ul = h('ul', 'h-changes');
+      for (const c of it.changes) {
+        const ci = h('li', 'h-change');
+        ci.append(h('span', 'h-field', `${c.field}: `), h('span', 'h-old', c.old), h('span', 'h-arrow', ' → '), h('span', 'h-new', c.new));
+        ul.appendChild(ci);
+      }
+      li.appendChild(ul);
+    }
+    if (ctx.admin && it.revertable) li.appendChild(smallBtn('Вернуть как было', 'undo', () => handlers.onRevert(p.id, it)));
+    return li;
   }
 
   function section(title: string, badge?: string): HTMLElement {

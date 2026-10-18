@@ -345,3 +345,156 @@ body.sheet-up .zoom-controls { opacity: 0; transform: translate(-50%, 24px); poi
 @media (min-width: 900px) {
   .tabs { -webkit-mask-image: none; mask-image: none; }
 }
+
+/* ——— US-007: вход, меню, админка, правка, история, документы ——— */
+/* Основной текст — не мельче 18px; мельче только служебные подписи (годы, счётчики, метки поколений). */
+.tab { font-size: 18px; }
+.empty-note, .hero-rel, .d-row dt, .add-btn, .toast, .field span, .g-add, .doc-add { font-size: 18px; }
+.btn { min-height: 52px; }
+
+.gen-rail span.covered { opacity: 0; }
+
+/* Вкладки карточки: на телефоне переносятся на вторую строку — ни одна не обрезана. */
+@media (max-width: 899px) {
+  .tabs { flex-wrap: wrap; justify-content: center; overflow: visible; -webkit-mask-image: none; mask-image: none; margin-left: 0; margin-right: 0; padding: 0 0 4px; }
+  .tab { padding: 0 14px; }
+}
+@media (min-width: 900px) {
+  .tabs { flex-wrap: wrap; justify-content: center; overflow: visible; margin-left: 0; margin-right: 0; padding: 0 0 4px; }
+}
+
+.needs-check { margin: 8px 0 0; padding: 4px 14px; border-radius: 999px; background: color-mix(in srgb, var(--amber) 18%, var(--surface)); color: #7a4a10; font-size: 18px; font-weight: 600; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) .needs-check { color: #f3c98a; } }
+
+.btn-mini { min-height: 48px; min-width: 48px; padding: 0 14px; border-radius: 16px; font-size: 18px; font-weight: 500; background: var(--surface); color: var(--ink-2); box-shadow: inset 0 0 0 1.5px var(--line); flex: none; }
+.btn-mini:hover { background: var(--green-50); }
+.btn-mini .ico svg { width: 20px; height: 20px; }
+.btn-danger { background: #b3261e; color: #fff; }
+.btn-danger:hover { background: #8f1d17; }
+.hint { margin: 8px 0 0; font-size: 18px; line-height: 1.45; color: var(--ink-3); }
+
+.fact-list li { flex-wrap: wrap; align-items: center; }
+.fact-text { flex: 1 1 160px; min-width: 0; }
+.rel-item { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rel-item .rel-row { flex: 1 1 220px; width: auto; }
+.rel-item .btn-mini { margin-left: auto; }
+
+/* Документы: настоящие миниатюры, плитка — кнопка */
+.doc { background: none; border: 0; padding: 0; text-align: left; color: inherit; font: inherit; cursor: pointer; min-height: 48px; }
+.doc-cap { display: flex; flex-direction: column; }
+.doc-paper.has-thumb { overflow: hidden; background: var(--surface-2); }
+.doc-thumb { width: 100%; height: 100%; object-fit: cover; display: block; }
+.doc-title { font-size: 16px; word-break: break-word; }
+@media (max-width: 899px) { .doc-grid { grid-template-columns: repeat(2, 1fr); } }
+.g-photo { padding: 0; border: 0; cursor: pointer; background: var(--surface-2); }
+
+/* История правок */
+.history-list { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 10px; }
+.h-item { padding: 14px 16px; border-radius: 18px; background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); display: grid; gap: 6px; }
+.h-title { margin: 0; font-size: 18px; font-weight: 600; line-height: 1.35; }
+.h-meta { margin: 0; font-size: 16px; color: var(--ink-3); }
+.h-changes { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 4px; }
+.h-change { font-size: 18px; line-height: 1.4; word-break: break-word; }
+.h-field { font-weight: 600; }
+.h-old { color: var(--ink-3); text-decoration: line-through; text-decoration-thickness: 1px; }
+.h-new { color: var(--green-700); font-weight: 600; }
+.h-item .btn-mini { justify-self: start; margin-top: 4px; }
+
+/* Тост с кнопкой «Восстановить» */
+.toast { display: flex; align-items: center; gap: 14px; }
+.toast.has-action { pointer-events: auto; }
+.toast-btn { min-height: 48px; padding: 0 16px; border-radius: 16px; border: 0; background: var(--green); color: #fff; font-size: 18px; font-weight: 600; cursor: pointer; }
+.toast-btn[hidden] { display: none; }
+
+/* Меню в верхней панели */
+.menu { position: relative; flex: none; margin-left: auto; }
+.menu-btn { width: 56px; height: 56px; border-radius: 50%; border: 1.5px solid var(--line); background: var(--surface); box-shadow: var(--shadow-1); display: grid; place-items: center; cursor: pointer; }
+.menu-btn svg { width: 26px; height: 26px; fill: none; stroke: var(--ink-2); stroke-width: 2.2; stroke-linecap: round; }
+.menu-btn:focus-visible { outline: 3px solid var(--green); outline-offset: 2px; }
+.menu-pop { position: absolute; right: 0; top: 64px; min-width: 260px; padding: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 22px; box-shadow: var(--shadow-2); display: grid; gap: 4px; animation: drop-in 0.2s var(--ease); z-index: 5; }
+.menu-pop[hidden] { display: none; }
+.menu-who { margin: 6px 12px 8px; font-size: 18px; color: var(--ink-3); }
+.menu-item { min-height: 52px; padding: 0 14px; border: 0; border-radius: 14px; background: none; text-align: left; font-size: 18px; font-weight: 500; cursor: pointer; }
+.menu-item:hover, .menu-item:focus-visible { background: var(--green-50); outline: none; }
+
+/* Экран входа */
+.login { position: fixed; inset: 0; overflow-y: auto; display: grid; place-items: center; padding: 24px 16px calc(24px + env(safe-area-inset-bottom)); background: radial-gradient(900px 500px at 50% -10%, var(--green-50), transparent 70%), var(--bg); }
+.login-card { width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 16px; padding: 28px 22px; background: var(--surface); border: 1px solid var(--line); border-radius: 28px; box-shadow: var(--shadow-2); }
+.login-mark { align-self: center; width: 64px; height: 64px; border-radius: 20px; }
+.login-mark svg { width: 36px; height: 36px; }
+.login-card h1 { margin: 0; text-align: center; font-size: 28px; font-weight: 700; letter-spacing: -0.015em; }
+.login-sub { margin: -6px 0 4px; text-align: center; font-size: 18px; line-height: 1.45; color: var(--ink-2); }
+.login-hint { margin: 0; text-align: center; font-size: 18px; line-height: 1.45; color: var(--ink-3); }
+.btn-big { min-height: 60px; font-size: 20px; border-radius: 30px; }
+.form-error { margin: 0; padding: 12px 16px; border-radius: 16px; background: color-mix(in srgb, #b3261e 10%, var(--surface)); color: #8f1d17; font-size: 18px; line-height: 1.4; }
+.form-error[hidden], .form-ok[hidden] { display: none; }
+.form-ok { margin: 0; padding: 12px 16px; border-radius: 16px; background: var(--green-50); color: var(--green-700); font-size: 18px; line-height: 1.4; word-break: break-word; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) .form-error { color: #ffb4ab; } }
+
+/* «Сервер просыпается…» */
+.wake { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 16px; background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+.wake[hidden] { display: none; }
+.wake-card { max-width: 420px; padding: 28px 24px; border-radius: 28px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-2); text-align: center; display: grid; gap: 10px; justify-items: center; }
+.wake-spin { width: 44px; height: 44px; border-radius: 50%; border: 4px solid var(--green-100); border-top-color: var(--green-btn); animation: spin 1s linear infinite; }
+.wake-title { margin: 0; font-size: 22px; font-weight: 700; }
+.wake-sub { margin: 0; font-size: 18px; line-height: 1.45; color: var(--ink-2); }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Форма «Редактировать» */
+.field textarea { min-height: 140px; padding: 14px 16px; font: inherit; font-size: 18px; line-height: 1.5; border-radius: 16px; border: 1.5px solid var(--line); background: var(--surface); color: inherit; outline: none; width: 100%; resize: vertical; }
+.field textarea:focus { border-color: var(--green); box-shadow: 0 0 0 4px var(--green-100); }
+.field input::placeholder, .field textarea::placeholder { color: var(--ink-3); }
+.facts-edit { border: 0; margin: 0; padding: 0; display: grid; gap: 10px; }
+.facts-edit legend { padding: 0; margin-bottom: 8px; font-size: 18px; font-weight: 600; color: var(--ink); }
+.fact-edit-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.fact-edit-list li { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 8px 8px 14px; border-radius: 16px; background: var(--surface-2); font-size: 18px; }
+.fact-add { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+.fact-add .field { flex: 1 1 200px; }
+.check { display: flex; align-items: center; gap: 12px; min-height: 52px; font-size: 18px; cursor: pointer; }
+.check input { width: 26px; height: 26px; accent-color: var(--green-btn); flex: none; }
+
+/* Просмотр документа */
+.viewer { border: 0; padding: 0; margin: 0; width: 100vw; height: 100dvh; max-width: 100vw; max-height: 100dvh; background: rgba(10, 14, 9, 0.94); color: #fff; }
+.viewer::backdrop { background: rgba(10, 14, 9, 0.6); }
+.viewer[open] { display: flex; flex-direction: column; }
+.viewer figure { flex: 1; margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 72px 12px 24px; min-height: 0; }
+.viewer-img { max-width: 100%; max-height: calc(100dvh - 140px); object-fit: contain; border-radius: 8px; background: #fff; }
+.viewer figcaption { font-size: 18px; text-align: center; word-break: break-word; }
+.viewer-close { position: absolute; top: calc(12px + env(safe-area-inset-top)); right: 12px; }
+
+/* Админка */
+.admin { position: fixed; inset: 0; z-index: 8; background: var(--bg); display: flex; flex-direction: column; overflow: hidden; }
+.admin[hidden] { display: none; }
+.admin-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: calc(14px + env(safe-area-inset-top)) 16px 14px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.admin-head h2 { margin: 0; font-size: 24px; font-weight: 700; }
+.admin-body { flex: 1; overflow-y: auto; padding: 8px 16px calc(32px + env(safe-area-inset-bottom)); display: grid; gap: 8px; align-content: start; max-width: 760px; width: 100%; margin: 0 auto; }
+.admin-sec { padding: 18px 0; border-bottom: 1px solid var(--line); display: grid; gap: 12px; }
+.admin-sec h3 { margin: 0; font-size: 21px; font-weight: 700; }
+.admin-results, .admin-members, .admin-deleted { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.admin-pick { width: 100%; min-height: 56px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; padding: 8px 14px; border: 0; border-radius: 16px; background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); text-align: left; cursor: pointer; }
+.admin-pick:hover { background: var(--green-50); }
+.admin-pick-name { font-size: 18px; font-weight: 500; }
+.admin-pick-meta { font-size: 15px; color: var(--ink-3); }
+.admin-chosen { margin: 0; padding: 12px 16px; border-radius: 16px; background: var(--green-50); color: var(--green-700); font-size: 18px; font-weight: 600; }
+.admin-chosen[hidden] { display: none; }
+.admin-pass { align-items: flex-end; }
+.admin-member { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 18px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
+.admin-member.is-disabled { opacity: 0.7; }
+.am-text { display: flex; flex-direction: column; flex: 1 1 220px; min-width: 0; }
+.am-name { font-size: 18px; font-weight: 600; word-break: break-word; }
+.am-meta { font-size: 16px; color: var(--ink-3); word-break: break-word; }
+.am-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.am-reset { flex-basis: 100%; align-items: flex-end; }
+
+/* Выбор человека на дереве для админки */
+.pick-bar { position: fixed; left: 50%; top: calc(88px + env(safe-area-inset-top)); transform: translateX(-50%); z-index: 6; display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 18px; max-width: calc(100vw - 32px); border-radius: 30px; background: var(--ink); color: var(--bg); font-size: 18px; font-weight: 500; box-shadow: var(--shadow-2); }
+.pick-bar[hidden] { display: none; }
+body.picking .zoom-controls { opacity: 0; pointer-events: none; }
+.sheet-grab { height: 48px; }
+.admin-head h2 { font-size: 21px; min-width: 0; }
+.admin-head .btn { flex: none; }
+@media (min-width: 900px) {
+  .sheet { top: 104px; }
+  .admin-head h2 { font-size: 24px; }
+}
+.add-dialog header p { font-size: 18px; }

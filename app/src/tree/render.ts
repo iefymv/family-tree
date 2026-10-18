@@ -3,7 +3,7 @@
 // Тексты ставятся только через textContent — имена из базы никогда не идут в разметку.
 import type { FamilyData } from './graph';
 import type { LayoutOptions, NodeRect, TreeLayout } from './layout';
-import { fullName, yearOf, TODAY_YEAR, type Profile } from '../demo/profiles';
+import { fullName, yearOf, TODAY_YEAR, type LifeEvent, type Profile } from '../demo/profiles';
 import { initials, initialsGradient, INITIAL_GRADIENTS, portraitURI } from './portrait';
 import type { AddKind } from './mutate';
 
@@ -66,12 +66,21 @@ export function shortDate(date: string): string {
   return m && d ? `${pad2(+d)}.${m}.${y}` : y;
 }
 
+/** Дата события для подписи: как написана в семье, иначе разобранная; места не показываем. */
+const eventText = (e?: LifeEvent): string => (e ? e.label ?? (e.date ? shortDate(e.date) : '') : '');
+
 export function datesLine(p: Profile, font = TEXT.datesFont, max = TEXT.maxW): string {
-  if (!p.birth && !p.death) return '';
-  if (!p.death) return p.birth ? `род. ${shortDate(p.birth.date)}` : '';
-  const full = `${p.birth ? shortDate(p.birth.date) : '?'} – ${shortDate(p.death.date)}`;
+  const b = eventText(p.birth);
+  const d = eventText(p.death);
+  if (!b && !d) return '';
+  if (!d) {
+    if (p.death) return b ? `${b} – ?` : '';
+    const line = `род. ${b}`;
+    return textWidth(line, font) <= max || !yearOf(p.birth) ? line : `род. ${yearOf(p.birth)}`;
+  }
+  const full = `${b || '?'} – ${d}`;
   if (textWidth(full, font) <= max) return full;
-  return `${yearOf(p.birth) ?? '?'} – ${yearOf(p.death)}`;
+  return `${yearOf(p.birth) ?? '?'} – ${yearOf(p.death) ?? '?'}`;
 }
 
 /** Фото человека: загруженное, портрет-заглушка или null (тогда инициалы). */
