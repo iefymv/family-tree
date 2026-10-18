@@ -15,6 +15,9 @@ import { avatarEl, createSheet, type RelativeGroup } from '../ui/sheet';
 import { createViewer } from '../ui/viewer';
 import '../ui/selection.css';
 import { createShareDialog, shareButton } from '../ui/share';
+import { fetchFamilyPassword } from '../lib/family-password';
+import { createJoin, pinBesideMain } from '../ui/join';
+import { linkRelative } from '../lib/link';
 import { invalidate } from '../lib/signedUrls';
 import type { Backend } from './backend';
 
@@ -77,6 +80,20 @@ export async function mountTreeApp(app: HTMLElement, backend: Backend): Promise<
     clearTimeout(toastTimer);
     toastTimer = window.setTimeout(() => toast.classList.remove('show'), action ? 10000 : 3200);
   }
+
+  // ——— карточка без связей: баннер и «Это мой…» (ui/join.ts) ———
+  const join = createJoin(app, {
+    selfId: backend.me.personId,
+    family: () => family,
+    profiles: () => profiles,
+    link: (otherId, kind) => (live ? linkRelative(backend.me.personId, otherId, kind) : Promise.reject(new Error('В демо связи не сохраняются'))),
+    async linked() {
+      await reload();
+      choose(rootId);
+    },
+    say,
+    confirm: (text) => window.confirm(text),
+  });
 
   // ——— дерево ———
   const view = createTreeView(stage, {
@@ -155,6 +172,8 @@ export async function mountTreeApp(app: HTMLElement, backend: Backend): Promise<
 
   function relayout() {
     layout = layoutTree(family, rootId, NODE_LAYOUT);
+    // Своя карточка без связей — рядом с основным деревом, а не внизу среди островов.
+    if (join.active() && rootId === backend.me.personId) layout = pinBesideMain(layout, rootId);
     kin = kinshipMap(family, rootId);
     // Минимальный масштаб — чтобы всё дерево целиком помещалось на экран.
     const fit = Math.min(window.innerWidth / (layout.width + 200), window.innerHeight / (layout.height + 300));
@@ -195,7 +214,8 @@ export async function mountTreeApp(app: HTMLElement, backend: Backend): Promise<
   function visibleArea() {
     const W = window.innerWidth;
     const H = window.innerHeight;
-    const top = (document.querySelector('.topbar')?.getBoundingClientRect().bottom ?? 80) - 8;
+    const banner = document.querySelector('.join-banner:not([hidden])')?.getBoundingClientRect().bottom ?? 0;
+    const top = Math.max(document.querySelector('.topbar')?.getBoundingClientRect().bottom ?? 80, banner) - 8;
     let bottom = H;
     let right = W;
     if (sheet.isOpen()) {
@@ -229,6 +249,7 @@ export async function mountTreeApp(app: HTMLElement, backend: Backend): Promise<
     }
     chosenId = id;
     view.highlight(null);
+    join.select(id);
     select(id);
     if (instant) fitChosen(true);
     else requestAnimationFrame(() => fitChosen());
@@ -245,6 +266,7 @@ export async function mountTreeApp(app: HTMLElement, backend: Backend): Promise<
     buildRail();
     updateCount();
     refreshHomeThumb();
+    join.update();
   }
 
   // ——— карточка человека ———
@@ -387,6 +409,7 @@ export async function mountTreeApp(app: HTMLElement, backend: Backend): Promise<
     selectedId = id;
     chosenId = id;
     view.highlight(null);
+    join.select(id);
     const ctx = () => ({ isRoot: id === rootId, relation: kin.get(id), can: canAdd(family, id), relatives: relativesOf(id), admin, live });
     sheet.open(p, ctx());
     // Шторка только что открыта (класс is-open ставится в следующем кадре) — выбираем явно.
@@ -612,6 +635,7 @@ export async function mountTreeApp(app: HTMLElement, backend: Backend): Promise<
   const share = createShareDialog(app, {
     say,
     name: () => profiles.get(backend.me.personId)?.given ?? '', // имени нет — приветствие без него
+    password: live ? fetchFamilyPassword : undefined,
   });
   const openShare = () => {
     if (sheet.isOpen()) closePerson();
@@ -772,6 +796,13 @@ export async function mountTreeApp(app: HTMLElement, backend: Backend): Promise<
   buildRail();
   updateCount();
   choose(rootId, true);
+  join.update();
+  if (join.active()) {
+    // Своя карточка — в левом верхнем углу экрана, основное дерево — правее и ниже.
+    const c = view.centerOf(rootId);
+    const a = visibleArea();
+    if (c) zoomCtl.focusOn(c.x, c.y, { scale: 0.7, instant: true, screen: { x: a.x + Math.min(a.w * 0.3, 160), y: a.y + 110 } });
+  }
   document.body.classList.add('ready');
   document.body.dataset.mode = backend.mode;
 

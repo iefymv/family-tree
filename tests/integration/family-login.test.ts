@@ -86,11 +86,32 @@ describe('family-login', () => {
     assert.equal(r.json.error, 'Неверное имя или пароль');
   });
 
-  test('имени нет на дереве — 404 с предложением привязаться', async () => {
-    const r = await family({ name: `Никита ${S('Нетов')}`, password: FAMILY });
-    assert.equal(r.status, 404);
-    assert.equal(r.json.need, 'link');
-    assert.match(String(r.json.error), /Вас ещё нет на дереве/);
+  test('имени нет на дереве — сразу своя карточка без связей и вход на неё', async () => {
+    const one = await family({ name: 'Никита', password: FAMILY });
+    assert.equal(one.status, 400);
+    assert.equal(one.json.error, 'Введите имя и фамилию');
+
+    const r = await family({ name: `  никита   ${S('нетов')} `, password: FAMILY, birth_year: 1999 });
+    assert.equal(r.status, 201, JSON.stringify(r.json));
+    const id = String(r.json.person_id);
+    trackPerson(id);
+    assert.equal(r.json.login, `никита ${S('нетов')}`);
+    const { data: p } = await service.from('people').select('given_name, surname, birth_date_text, birth_date_from, birth_date_to, is_placeholder').eq('id', id).single();
+    assert.deepEqual(p, { given_name: 'Никита', surname: S('Нетов'), birth_date_text: '1999', birth_date_from: '1999-01-01', birth_date_to: '1999-12-31', is_placeholder: false });
+    const { count: rels } = await service.from('relations').select('*', { count: 'exact', head: true }).or(`from_person.eq.${id},to_person.eq.${id}`);
+    assert.equal(rels, 0, 'связей нет');
+    const m = await memberOf(id);
+    assert.equal(m?.family_login, true);
+    assert.equal(m?.display_name, 'Никита');
+    assert.equal(await signInAs(String(r.json.login)), id, 'в центре — своя новая карточка');
+
+    // Второй вход тем же именем — та же карточка и учётка, двойника нет.
+    const again = await family({ name: `Никита ${S('Нетов')}`, password: FAMILY });
+    assert.equal(again.status, 200, JSON.stringify(again.json));
+    assert.equal(again.json.login, r.json.login);
+    assert.equal(await count('members', 'person_id', id), 1);
+    const { data: same } = await service.from('people').select('id').eq('surname', S('Нетов'));
+    assert.deepEqual((same ?? []).map((x) => x.id), [id]);
   });
 
   test('тёзки: 409 «нужен год», с годом — вход на нужную карточку', async () => {
@@ -182,55 +203,31 @@ describe('family-login', () => {
     assert.equal((await authUserByEmail(toEmail(String(first.json.login))))?.id, m!.user_id);
   });
 
-  test('самодобавление: поиск родни, «я их ребёнок», вход на новую карточку', async () => {
-    const anchor = await person('Остап', S('Рудин'), { birth_date_text: '1960', birth_date_from: '1960-01-01', birth_date_to: '1960-12-31', notes: 'секрет' });
-    const name = `Ульяна ${S('Рудина')}`;
-    const miss = await family({ name, password: FAMILY });
-    assert.equal(miss.status, 404);
-    assert.equal(miss.json.need, 'link');
+  test('карточка без связей: сам показывает родню через link_relative (только за свою карточку)', async () => {
+    const grandma = await person('Аграфена', S('Лукина'));
+    const r = await family({ name: `Тихон ${S('Лукин')}`, password: FAMILY });
+    assert.equal(r.status, 201, JSON.stringify(r.json));
+    const self = String(r.json.person_id);
+    trackPerson(self);
+    const { client } = await signInClient(toEmail(String(r.json.login)), FAMILY);
 
-    // Поиск — только после верного пароля, и только id + ФИО + год.
-    const denied = await family({ name, password: 'не-тот', search: S('Рудин') });
-    assert.equal(denied.status, 401);
-    assert.equal(denied.json.people, undefined);
-    const found = await family({ name, password: FAMILY, search: `остап ${S('рудин')}` });
-    assert.equal(found.status, 200, JSON.stringify(found.json));
-    const people = found.json.people as Record<string, unknown>[];
-    assert.deepEqual(people, [{ id: anchor, name: `${S('Рудин')} Остап`, birth_year: 1960 }]);
+    // Чужую карточку связывать нельзя.
+    const foreign = await client.rpc('link_relative', { self_person: grandma, other_person: self, kind: 'child' });
+    assert.equal(foreign.error?.code, '42501');
 
-    const noSurname = await family({ name: 'Ульяна', password: FAMILY, link: { anchor_id: anchor, kind: 'child' } });
-    assert.equal(noSurname.status, 400);
-    assert.equal(noSurname.json.error, 'Укажите имя и фамилию');
-    const badAnchor = await family({ name, password: FAMILY, link: { anchor_id: randomUUID(), kind: 'child' } });
-    assert.equal(badAnchor.status, 404);
-    assert.equal(await authUserByEmail(toEmail(`ульяна ${S('рудина')}`)), null, 'компенсация: учётки нет');
-
-    const added = await family({ name, password: FAMILY, link: { anchor_id: anchor, kind: 'child' }, birth_date: '05.06.1990', sex: 'f' });
-    assert.equal(added.status, 201, JSON.stringify(added.json));
-    const newId = String(added.json.person_id);
-    trackPerson(newId);
-    assert.equal(await signInAs(String(added.json.login)), newId, 'в центре — новая карточка');
-
-    const { data: p } = await service.from('people').select('given_name, surname, sex, birth_date_text, birth_date_from, birth_date_to, created_by').eq('id', newId).single();
-    const m = await memberOf(newId);
-    assert.deepEqual(p, { given_name: 'Ульяна', surname: S('Рудина'), sex: 'f', birth_date_text: '05.06.1990',
-      birth_date_from: '1990-06-05', birth_date_to: '1990-06-05', created_by: m!.user_id });
-    assert.equal(m!.family_login, true);
-    const { data: rel } = await service.from('relations_live').select('kind, from_person, to_person').eq('to_person', newId);
-    assert.deepEqual(rel, [{ kind: 'parent', from_person: anchor, to_person: newId }]);
-    const { data: ed } = await service.from('edits').select('actor_label').eq('actor', m!.user_id);
-    assert.ok((ed ?? []).length >= 2);
-    assert.ok(ed!.every((e) => e.actor_label === 'Ульяна'), 'подпись в истории — имя нового человека');
-
-    // Повторно добавить того же (имя + год) нельзя — указывается обычный вход.
-    const dup = await family({ name, password: FAMILY, link: { anchor_id: anchor, kind: 'child' }, birth_date: '1990' });
-    assert.equal(dup.status, 409);
-    assert.equal(dup.json.need, 'login');
-    // А обычный семейный вход теперь находит её карточку.
-    const again = await family({ name, password: FAMILY });
-    assert.equal(again.status, 200, JSON.stringify(again.json));
-    assert.equal(await signInAs(String(again.json.login)), newId);
-    assert.equal(await count('members', 'person_id', newId), 1);
+    // «+» у бабушки: мама (обычный add_relative), затем «Это моя мама».
+    const { data: added, error: aErr } = await client.rpc('add_relative', { anchor: grandma, kind: 'child', fields: { given_name: 'Марфа', surname: S('Лукина'), sex: 'f' } });
+    assert.equal(aErr, null);
+    const mom = (added as { person: { id: string } }).person.id;
+    trackPerson(mom);
+    const link = await client.rpc('link_relative', { self_person: self, other_person: mom, kind: 'parent' });
+    assert.equal(link.error, null, link.error?.message);
+    const { data: rel } = await service.from('relations_live').select('kind, from_person, to_person').eq('to_person', self);
+    assert.deepEqual(rel, [{ kind: 'parent', from_person: mom, to_person: self }]);
+    const { data: ed } = await service.from('edits').select('actor_label').eq('table_name', 'relations').eq('row_id', (link.data as { relation_ids: string[] }).relation_ids[0]);
+    assert.deepEqual(ed, [{ actor_label: 'Тихон' }], 'в истории — сам человек');
+    const dup = await client.rpc('link_relative', { self_person: self, other_person: mom, kind: 'parent' });
+    assert.equal(dup.error?.code, '23505');
   });
 
   test('похожая фамилия («Ивашка» вместо «Ивашко», мягкий знак): «Это вы?» → подтверждение → вход на ту карточку', async () => {
@@ -248,12 +245,11 @@ describe('family-login', () => {
     assert.deepEqual(ask.json.candidates, [{ id, fio: `${S('Ивашко')} Арсений`, birth_year: 1961 }]);
     assert.equal(await memberOf(id), null, 'до подтверждения вход не создаётся');
 
-    // Год не совпал — похожий не предлагается.
-    const wrongYear = await family({ name: typed, password: FAMILY, birth_year: 1990 });
-    assert.equal(wrongYear.status, 404);
-    assert.equal(wrongYear.json.need, 'link');
-    // Слишком далеко (3 правки) — тоже нет.
-    assert.equal((await family({ name: `Арсений ${S('Ивонька')}`, password: FAMILY })).status, 404);
+    // Слишком далеко (3 правки) — похожих нет, сразу новая карточка.
+    const far = await family({ name: `Арсений ${S('Ивонька')}`, password: FAMILY });
+    assert.equal(far.status, 201, JSON.stringify(far.json));
+    trackPerson(String(far.json.person_id));
+    assert.notEqual(far.json.person_id, id);
     // Подтвердить чужого (не похожего на введённое имя) нельзя.
     const bad = await family({ name: typed, password: FAMILY, confirm_person_id: other });
     assert.equal(bad.status, 404);
@@ -263,6 +259,17 @@ describe('family-login', () => {
     assert.equal(ok.json.login, `арсений ${S('ивашко')}`);
     assert.equal(await signInAs(String(ok.json.login)), id);
     assert.equal(await count('members', 'person_id', id), 1);
+
+    // «Нет, меня нет на дереве» (год не совпадает с похожим) — новая карточка, а не вход в чужую.
+    const no = await family({ name: typed, password: FAMILY, create_new: true, birth_year: 1990 });
+    assert.equal(no.status, 201, JSON.stringify(no.json));
+    trackPerson(String(no.json.person_id));
+    assert.notEqual(no.json.person_id, id);
+    assert.equal(no.json.login, `арсений ${S('ивашка')}`);
+    // Повторное «нет» тем же именем и годом — уже есть такой человек, входить обычным образом.
+    const twice = await family({ name: typed, password: FAMILY, create_new: true, birth_year: 1990 });
+    assert.equal(twice.status, 409);
+    assert.equal(twice.json.need, 'login');
 
     // ь/й/э: карточка «Солпе», вводят «Сольпи».
     const soft = await person('Нонна', S('Солпе'));

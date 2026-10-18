@@ -435,12 +435,6 @@ body.sheet-up .zoom-controls { opacity: 0; transform: translate(-50%, 24px); poi
 .login-welcome .welcome-title, .login-welcome .welcome-lead { text-align: center; }
 .login-step { display: flex; flex-direction: column; gap: 16px; }
 .login-link-title { margin: 0; font-weight: 600; color: var(--ink); }
-.login-choices { margin: 0; padding: 0; border: 0; display: grid; gap: 8px; min-width: 0; }
-.login-choices legend { padding: 0 0 6px; font-size: 18px; font-weight: 500; color: var(--ink-2); }
-.login-choices-row { grid-template-columns: 1fr 1fr; }
-.login-choice { min-height: 52px; display: flex; align-items: center; gap: 12px; padding: 0 16px; border-radius: 16px; background: var(--surface-2); box-shadow: inset 0 0 0 1.5px var(--line); font-size: 18px; cursor: pointer; }
-.login-choice:has(input:checked) { background: var(--green-50); box-shadow: inset 0 0 0 2px var(--green); color: var(--green-700); font-weight: 600; }
-.login-choice input { width: 22px; height: 22px; margin: 0; accent-color: var(--green-btn); flex: none; }
 .login-card > .btn[hidden], .login-hint[hidden] { display: none; }
 /* Приветствие на дереве после первого входа (закрывается, запоминается на устройстве) */
 .welcome-card { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 7; width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 140px); overflow-y: auto; display: grid; gap: 12px; padding: 22px 22px 18px; border-radius: 24px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-2); }

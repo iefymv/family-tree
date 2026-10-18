@@ -1,7 +1,7 @@
 // Вход по «имя фамилия» + пароль: логин → синтетический email (auth.ts) → signInWithPassword.
 // Не подошло (неверные данные) — пробуем семейный пароль: family-login находит человека на дереве и отдаёт логин его учётки.
 import { toEmail } from './auth';
-import { FamilyLoginError, familyLogin, familySelfAdd, type SelfAdd } from './family-login';
+import { FamilyLoginError, familyLogin } from './family-login';
 import { db } from './supabase';
 
 export type Role = 'admin' | 'relative' | 'agent';
@@ -18,8 +18,8 @@ export class SignInError extends Error {}
 export interface SignInOptions {
   /** Год рождения — различить тёзок при семейном входе. */
   birthYear?: number;
-  /** Человека нет на дереве: добавить его рядом с родственником и войти. */
-  selfAdd?: SelfAdd;
+  /** «Нет, меня нет на дереве»: завести карточку без связей и войти. */
+  createNew?: boolean;
   /** «Это вы?» — выбран похожий человек с дерева. */
   confirmPersonId?: string;
 }
@@ -31,18 +31,16 @@ async function passwordSignIn(email: string, password: string) {
 
 /**
  * Бросает LoginError (недопустимое имя), SignInError (неверное имя/пароль, сеть)
- * или FamilyLoginError (семейный вход: нужен год рождения, человека нет на дереве, вход закрыт, много попыток).
+ * или FamilyLoginError (семейный вход: нужен год рождения, «Это вы?», вход закрыт, много попыток).
  */
 export async function signIn(nameInput: string, password: string, opts: SignInOptions = {}): Promise<Me> {
   const email = toEmail(nameInput);
-  const familyOnly = !!(opts.selfAdd || opts.birthYear || opts.confirmPersonId);
+  const familyOnly = !!(opts.createNew || opts.birthYear || opts.confirmPersonId);
   let error = familyOnly ? null : await passwordSignIn(email, password);
   if (familyOnly || (error && (error.code === 'invalid_credentials' || (error.status === 400 && !error.code)))) {
     let login: string;
     try {
-      login = opts.selfAdd
-        ? (await familySelfAdd(nameInput, password, opts.selfAdd)).login
-        : (await familyLogin(nameInput, password, opts.birthYear, opts.confirmPersonId)).login;
+      login = (await familyLogin(nameInput, password, opts)).login;
     } catch (e) {
       if (e instanceof FamilyLoginError && e.httpStatus === 401) throw new SignInError('Неверное имя или пароль');
       throw e;

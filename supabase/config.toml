@@ -423,3 +423,6 @@ verify_jwt = false
 # family-login вызывается до входа (JWT пользователя ещё нет); сама проверяет семейный пароль.
 [functions.family-login]
 verify_jwt = false
+
+[functions.family-password]
+verify_jwt = false

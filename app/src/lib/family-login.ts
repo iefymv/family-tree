@@ -1,15 +1,7 @@
-// Вход по семейному паролю: Edge Function family-login находит человека на дереве (или добавляет его)
-// и возвращает логин учётки; дальше обычный signInWithPassword. Пароль никуда не сохраняется.
+// Вход по семейному паролю: Edge Function family-login находит человека на дереве (или заводит ему карточку
+// без связей) и возвращает логин учётки; дальше обычный signInWithPassword. Пароль никуда не сохраняется.
 import { FunctionsHttpError } from '@supabase/supabase-js';
 import { db } from './supabase';
-
-export type LinkKind = 'child' | 'parent' | 'spouse' | 'sibling';
-
-export interface Relative {
-  id: string;
-  name: string;
-  birth_year: number | null;
-}
 
 /** Похожий человек на дереве для вопроса «Это вы?». */
 export interface Candidate {
@@ -58,25 +50,18 @@ async function call<T>(body: Record<string, unknown>): Promise<T> {
   throw Object.assign(new Error('fetch failed'), { status: 0 });
 }
 
-export const familyLogin = (name: string, password: string, birthYear?: number, confirmPersonId?: string) =>
-  call<{ login: string }>({
-    name, password, ...(birthYear ? { birth_year: birthYear } : {}), ...(confirmPersonId ? { confirm_person_id: confirmPersonId } : {}),
-  });
-
-export const searchRelatives = async (name: string, password: string, query: string) =>
-  (await call<{ people: Relative[] }>({ name, password, search: query })).people;
-
-export interface SelfAdd {
-  givenName: string;
-  surname: string;
-  anchorId: string;
-  kind: LinkKind;
-  birthDate?: string;
-  sex?: 'm' | 'f';
+export interface FamilyLoginOptions {
+  birthYear?: number;
+  /** «Это вы?» — выбран похожий человек. */
+  confirmPersonId?: string;
+  /** «Нет, меня нет на дереве» — завести новую карточку без связей. */
+  createNew?: boolean;
 }
 
-export const familySelfAdd = (name: string, password: string, a: SelfAdd) =>
-  call<{ login: string; person_id: string }>({
-    name, password, given_name: a.givenName, surname: a.surname, link: { anchor_id: a.anchorId, kind: a.kind },
-    ...(a.birthDate ? { birth_date: a.birthDate } : {}), ...(a.sex ? { sex: a.sex } : {}),
+export const familyLogin = (name: string, password: string, o: FamilyLoginOptions = {}) =>
+  call<{ login: string; person_id?: string }>({
+    name, password,
+    ...(o.birthYear ? { birth_year: o.birthYear } : {}),
+    ...(o.confirmPersonId ? { confirm_person_id: o.confirmPersonId } : {}),
+    ...(o.createNew ? { create_new: true } : {}),
   });

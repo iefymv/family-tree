@@ -1,0 +1,10 @@
+/* «Присоединиться к дереву»: баннер для карточки без связей и кнопки «Это мой…» у выбранного человека.
+   Ниже верхней панели (z 3): выпадающий список поиска ложится поверх баннера. */
+.join-banner { position: fixed; left: 50%; transform: translateX(-50%); z-index: 2; width: min(640px, calc(100vw - 24px)); display: grid; gap: 12px; padding: 14px 18px; border-radius: 22px; background: var(--surface); border: 2px solid var(--green); box-shadow: var(--shadow-2); }
+.join-banner[hidden] { display: none; }
+.join-text { margin: 0; font-size: 18px; line-height: 1.4; font-weight: 600; color: var(--ink); }
+.join-who { margin: 0; font-size: 18px; line-height: 1.4; color: var(--ink-2); }
+.join-who[hidden], .join-actions[hidden] { display: none; }
+.join-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.join-actions .btn { min-height: 52px; padding: 0 12px; font-size: 18px; }
+body.picking .join-banner { display: none; }

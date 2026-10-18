@@ -1,11 +1,12 @@
 // family-login — вход родственника по одному семейному паролю, без заранее созданной учётки.
 // POST JSON {name, password, birth_year?} → {login}; клиент затем входит signInWithPassword(toEmail(login), password).
 // Сначала проверяется семейный пароль (секрет FAMILY_PASSWORD, сравнение за постоянное время), потом всё остальное.
-// Варианты после верного пароля:
-//   {search: 'текст'}                         → {people: [{id, name, birth_year}]} — поиск родственника для привязки;
-//   {link: {anchor_id, kind}, given_name?, surname?, birth_date?, sex?} → добавить себя на дерево и войти;
-//   {confirm_person_id}                       → «Это вы?» подтверждён: вход как при точном совпадении.
-// Точного совпадения нет, но есть похожие (опечатка в фамилии) → 409 {need:'confirm', candidates:[{id, fio, birth_year}]}.
+// После верного пароля:
+//   точное совпадение (или прежнее имя переименованной карточки) → вход на эту карточку;
+//   похожие (опечатка в фамилии) → 409 {need:'confirm', candidates:[{id, fio, birth_year}]};
+//   {confirm_person_id} — «Это вы?» подтверждён: вход как при точном совпадении;
+//   никого похожего или {create_new: true} («Нет, меня нет на дереве») → новая карточка БЕЗ связей
+//   (имя, фамилия из ввода, год рождения, если указан) + вход; связи человек показывает уже на дереве.
 // Человек ищется по ТЕКУЩИМ полям карточки (имя + фамилия / девичья / варианты имени), вход — по person_id,
 // логин учётки (и её email) не меняется при правке карточки. Пароли не логируются и не возвращаются.
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
@@ -19,7 +20,6 @@ const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '')
 const MAX_IP_FAILS = 10; // за 15 минут с одного адреса
 const MAX_ALL_FAILS = 50; // за 15 минут всего — на случай подмены заголовка адреса
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const KINDS = ['child', 'parent', 'spouse', 'sibling'];
 const WRONG = 'Неверное имя или пароль';
 
 const admin = createClient(SUPABASE_URL, SERVICE_KEY, {
@@ -181,27 +181,6 @@ function year(v: unknown): number | null {
   return n;
 }
 
-interface BirthDate { text: string; from: string; to: string; year: number }
-
-/** «1985», «12.03.1985» или «1985-03-12». */
-function birthDate(v: unknown): BirthDate | null {
-  if (v === undefined || v === null || v === '') return null;
-  if (typeof v !== 'string') throw new HttpError(400, 'Неверная дата рождения');
-  const s = v.trim();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const day = (y: number, m: number, d: number): BirthDate => {
-    const dt = new Date(Date.UTC(y, m - 1, d));
-    if (y < 1800 || y > 2200 || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) throw new HttpError(400, 'Неверная дата рождения');
-    const iso = `${y}-${pad(m)}-${pad(d)}`;
-    return { text: `${pad(d)}.${pad(m)}.${y}`, from: iso, to: iso, year: y };
-  };
-  let m: RegExpExecArray | null;
-  if ((m = /^(\d{4})$/.exec(s))) { const y = year(m[1])!; return { text: m[1], from: `${y}-01-01`, to: `${y}-12-31`, year: y }; }
-  if ((m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(s))) return day(+m[3], +m[2], +m[1]);
-  if ((m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s))) return day(+m[1], +m[2], +m[3]);
-  throw new HttpError(400, 'Дата рождения: год (1985) или число (12.03.1985)');
-}
-
 function emailFor(login: string): string {
   try {
     return toLoginAndEmail(login).email;
@@ -297,65 +276,28 @@ async function loginPerson(p: Person) {
 }
 
 // ---------------------------------------------------------------- сценарии
-async function search(body: Record<string, unknown>) {
-  const q = norm(typeof body.search === 'string' ? body.search : '');
-  if (q.length < 2) return { status: 200, body: { people: [] } };
-  const words = q.split(' ');
-  const people = (await livePeople())
-    .filter((p) => {
-      const hay = norm([p.given_name, p.surname, p.patronymic, p.maiden_name].filter(Boolean).join(' '));
-      return words.every((w) => hay.includes(w));
-    })
-    .slice(0, 20)
-    .map((p) => ({ id: p.id, name: fullName(p), birth_year: birthYear(p) }));
-  return { status: 200, body: { people } };
-}
+/** «Пётр» из «пётр»: заглавная у каждого слова и части через дефис. */
+const capital = (w: string) => w.split('-').map((x) => (x ? x[0].toLocaleUpperCase('ru') + x.slice(1) : x)).join('-');
 
-async function selfAdd(body: Record<string, unknown>, name: string) {
-  const link = body.link as Record<string, unknown> | null;
-  if (!link || typeof link !== 'object' || Array.isArray(link)) throw new HttpError(400, 'Неверная привязка');
-  const anchor = link.anchor_id, kind = link.kind;
-  if (typeof anchor !== 'string' || !UUID_RE.test(anchor)) throw new HttpError(400, 'Выберите родственника на дереве');
-  if (typeof kind !== 'string' || !KINDS.includes(kind)) throw new HttpError(400, 'Выберите, кем вы приходитесь');
-
-  // Имя и фамилия: явные поля или «Имя Фамилия» из строки входа (как написаны, без нижнего регистра).
-  const parts = name.normalize('NFC').trim().split(/\s+/);
-  const pick = (k: string, fallback: string) => {
-    const v = body[k];
-    return (typeof v === 'string' ? v : fallback).normalize('NFC').trim().replace(/\s+/g, ' ');
-  };
-  const given = pick('given_name', parts[0] ?? '');
-  const surname = pick('surname', parts.slice(1).join(' '));
-  if (!given || !surname) throw new HttpError(400, 'Укажите имя и фамилию');
+/** Новая карточка без связей из «Имя Фамилия» и вход family_login для неё. */
+async function createUnlinked(name: string, people: Person[], y: number | null) {
+  const parts = name.normalize('NFC').trim().split(/\s+/).filter(Boolean);
+  if (parts.length < 2) throw new HttpError(400, 'Введите имя и фамилию');
+  const given = capital(parts[0]);
+  const surname = parts.slice(1).map(capital).join(' ');
   if (given.length > 100 || surname.length > 100) throw new HttpError(400, 'Слишком длинное имя');
-  const sex = body.sex === undefined || body.sex === null || body.sex === '' ? 'u' : body.sex;
-  if (typeof sex !== 'string' || !['m', 'f', 'u'].includes(sex)) throw new HttpError(400, 'Неверный пол');
-  const born = birthDate(body.birth_date);
-
-  // Такой человек уже есть — входить обычным образом, а не плодить двойника.
   const key = norm(`${given} ${surname}`);
-  const same = (await livePeople()).filter((p) => nameKeys(p).has(key));
-  if (born) {
-    if (same.some((p) => bornIn(p, born.year))) {
-      throw new HttpError(409, 'Вы уже есть на дереве — войдите по имени, фамилии и семейному паролю', { need: 'login' });
-    }
-  } else if (same.length) {
-    throw new HttpError(409, 'Человек с таким именем уже есть на дереве. Если это вы — войдите обычным образом, если нет — укажите год рождения',
-      { need: 'birth_year' });
-  }
+  // Тёзка с тем же годом уже есть — это, скорее всего, он сам: входить обычным образом.
+  const same = people.filter((p) => nameKeys(p).has(key) && (y === null || !hasBirth(p) || bornIn(p, y)));
+  if (same.length) throw new HttpError(409, 'Человек с таким именем уже есть на дереве — войдите по имени и паролю', { need: 'login' });
 
-  const fields: Record<string, unknown> = { given_name: given, surname, sex };
-  if (born) Object.assign(fields, { birth_date_text: born.text, birth_date_from: born.from, birth_date_to: born.to });
-  const candidates = [key, ...(born ? [`${key} ${born.year}`] : [])];
+  const fields: Record<string, unknown> = { given_name: given, surname };
+  if (y !== null) Object.assign(fields, { birth_date_text: String(y), birth_date_from: `${y}-01-01`, birth_date_to: `${y}-12-31` });
   let personId = '';
-  const login = await createWithLogin(candidates, async (uid, l) => {
-    const { data, error } = await admin.rpc('family_self_add', {
-      p_user: uid, p_anchor: anchor, p_kind: kind, p_fields: fields, p_login: l, p_display: given,
-    });
+  const login = await createWithLogin([key, ...(y !== null ? [`${key} ${y}`] : [])], async (uid, l) => {
+    const { data, error } = await admin.rpc('family_self_create', { p_user: uid, p_fields: fields, p_login: l, p_display: given });
     if (error) {
-      console.error('family_self_add failed:', error.code);
-      if (error.code === 'P0002') return new HttpError(404, 'Этого родственника нет на дереве — найдите его ещё раз');
-      if (error.code === '23514') return new HttpError(409, 'У этого человека на дереве уже двое родителей');
+      console.error('family_self_create failed:', error.code);
       if (error.code === '23505') return error;
       return new HttpError(500, 'Не удалось добавить вас на дерево');
     }
@@ -384,13 +326,14 @@ async function familyLogin(body: Record<string, unknown>, ip: string) {
     throw new HttpError(401, WRONG);
   }
 
-  if (body.search !== undefined) return search(body);
   const input = norm(name);
   if (!input) throw new HttpError(400, 'Введите имя и фамилию');
-  if (body.link !== undefined) return selfAdd(body, name);
 
   const y = year(body.birth_year);
   const people = await livePeople();
+
+  // «Нет, меня нет на дереве» — сразу новая карточка без связей.
+  if (body.create_new === true) return createUnlinked(name, people, y);
 
   // «Это вы?» подтверждён: человек выбран из предложенных похожих (и должен им оставаться).
   if (body.confirm_person_id !== undefined) {
@@ -422,7 +365,7 @@ async function familyLogin(body: Record<string, unknown>, ip: string) {
       candidates: near.slice(0, 5).map((p) => ({ id: p.id, fio: fullName(p), birth_year: birthYear(p) })),
     });
   }
-  throw new HttpError(404, 'Вас ещё нет на дереве. Кем вы приходитесь родне?', { need: 'link' });
+  return createUnlinked(name, people, y);
 }
 
 Deno.serve(async (req) => {
