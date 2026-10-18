@@ -15,3 +15,4 @@ supabase/.temp/
 playwright-report/
 test-results/
 .DS_Store
+supabase/.branches/
