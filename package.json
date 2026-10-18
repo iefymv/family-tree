@@ -1,0 +1,17 @@
+{
+  "name": "family-tree",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "bootstrap-admin": "tsx scripts/bootstrap-admin.ts",
+    "create-member": "tsx scripts/create-member.ts",
+    "functions:serve": "sh scripts/serve-functions.sh",
+    "test:unit": "node --import tsx --test tests/unit/*.test.ts",
+    "test:functions": "node --import tsx --test --test-concurrency=1 tests/integration/*.test.ts"
+  },
+  "devDependencies": {
+    "@supabase/supabase-js": "2.118.0",
+    "@types/node": "26.6.5",
+    "tsx": "4.23.15"
+  }
+}
