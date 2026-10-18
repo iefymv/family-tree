@@ -1,6 +1,5 @@
-// Модель данных дерева и перевод её во вход библиотеки раскладки (relatives-tree).
+// Модель данных дерева и перевод её в граф для раскладки: люди, союзы (браки), компоненты.
 // raised_by и step в раскладку не идут: они возвращаются отдельным списком оверлеев.
-import type { Node as RtNode, Relation as RtRelation } from 'relatives-tree/lib/types';
 
 export type Gender = 'male' | 'female' | 'unknown';
 
@@ -42,14 +41,31 @@ export interface OverlayLink {
   type: 'raised_by' | 'step';
 }
 
-export interface GraphComponent {
-  rootId: string;
-  nodes: RtNode[];
+/** Человек в графе раскладки (включая placeholder «Неизвестно»). */
+export interface GraphPerson {
+  id: string;
+  gender: Gender;
+  placeholder: boolean;
+  /** Родители, участвующие в раскладке (biological, adoptive, unknown): 0 или ровно 2 (с placeholder). */
+  parents: string[];
+  adopted: boolean;
+}
+
+/** Союз двух людей: брак из данных или неявная пара общих родителей. Дети висят на союзе. */
+export interface Union {
+  id: string;
+  a: string;
+  b: string;
+  order: number;
+  divorced: boolean;
+  children: string[];
 }
 
 export interface TreeGraph {
-  main: GraphComponent;
-  islands: GraphComponent[];
+  persons: Map<string, GraphPerson>;
+  unions: Union[];
+  /** Компоненты связности; [0] — основное дерево (самая большая), остальные — острова. */
+  components: string[][];
   overlays: OverlayLink[];
   /** id placeholder-узлов «Неизвестно — добавить». */
   placeholderIds: Set<string>;
@@ -59,164 +75,107 @@ export interface TreeGraph {
 const LAYOUT_PARENT_TYPES: ReadonlySet<ParentType> = new Set(['biological', 'adoptive', 'unknown']);
 
 export const placeholderId = (knownParentId: string): string => `unknown-parent:${knownParentId}`;
+export const unionId = (a: string, b: string): string => (a < b ? `u:${a}+${b}` : `u:${b}+${a}`);
 
-type RtGender = RtNode['gender'];
-type RtRelType = RtRelation['type'];
+const opposite = (g: Gender): Gender => (g === 'male' ? 'female' : g === 'female' ? 'male' : 'unknown');
 
-interface Draft {
-  id: string;
-  gender: RtGender;
-  placeholder: boolean;
-  parents: Map<string, RtRelType>;
-  children: Map<string, RtRelType>;
-  spouses: Map<string, { type: RtRelType; order: number }>;
-}
-
-const toRtGender = (g: Gender, fallback: RtGender = 'male' as RtGender): RtGender =>
-  g === 'unknown' ? fallback : (g as RtGender);
-
-const opposite = (g: RtGender): RtGender => (g === 'male' ? 'female' : 'male') as RtGender;
-
-export function buildGraph(data: FamilyData, rootId: string): TreeGraph {
-  const byId = new Map(data.persons.map((p) => [p.id, p]));
-  if (!byId.has(rootId)) throw new Error(`rootId ${rootId} не найден`);
-
-  const drafts = new Map<string, Draft>();
+export function buildGraph(data: FamilyData): TreeGraph {
+  const persons = new Map<string, GraphPerson>();
   for (const p of data.persons) {
-    drafts.set(p.id, {
-      id: p.id,
-      gender: toRtGender(p.gender),
-      placeholder: false,
-      parents: new Map(),
-      children: new Map(),
-      spouses: new Map(),
-    });
+    persons.set(p.id, { id: p.id, gender: p.gender, placeholder: false, parents: [], adopted: false });
   }
 
-  const overlays: OverlayLink[] = [];
-  const addSpouse = (a: string, b: string, type: RtRelType, order: number) => {
-    drafts.get(a)!.spouses.set(b, { type, order });
-    drafts.get(b)!.spouses.set(a, { type, order });
+  const unions = new Map<string, Union>();
+  const ensureUnion = (a: string, b: string, order: number, divorced = false): Union => {
+    const id = unionId(a, b);
+    let u = unions.get(id);
+    if (!u) {
+      u = { id, a, b, order, divorced, children: [] };
+      unions.set(id, u);
+    }
+    return u;
   };
+  const maxOrder = (pid: string): number =>
+    Math.max(0, ...[...unions.values()].filter((u) => u.a === pid || u.b === pid).map((u) => u.order));
 
+  const overlays: OverlayLink[] = [];
   for (const r of data.relations) {
     if (r.kind === 'spouse') {
-      if (!byId.has(r.aId) || !byId.has(r.bId)) continue; // ребро к отсутствующему — отбросить
-      addSpouse(r.aId, r.bId, (r.divorced ? 'divorced' : 'married') as RtRelType, r.order);
+      if (!persons.has(r.aId) || !persons.has(r.bId) || r.aId === r.bId) continue; // ребро к отсутствующему — отбросить
+      const u = ensureUnion(r.aId, r.bId, r.order, !!r.divorced);
+      u.order = r.order;
+      u.divorced = !!r.divorced;
       continue;
     }
-    if (!byId.has(r.parentId) || !byId.has(r.childId)) continue;
+    if (!persons.has(r.parentId) || !persons.has(r.childId) || r.parentId === r.childId) continue;
     if (r.type === 'raised_by' || r.type === 'step') {
       overlays.push({ fromId: r.parentId, toId: r.childId, type: r.type });
       continue;
     }
     if (!LAYOUT_PARENT_TYPES.has(r.type)) continue;
-    const t = (r.type === 'adoptive' ? 'adopted' : 'blood') as RtRelType;
-    const child = drafts.get(r.childId)!;
-    if (child.parents.size >= 2 && !child.parents.has(r.parentId)) {
-      throw new Error(`У ${r.childId} больше двух родителей в раскладке`);
-    }
-    child.parents.set(r.parentId, t);
-    drafts.get(r.parentId)!.children.set(r.childId, t);
+    const child = persons.get(r.childId)!;
+    if (child.parents.includes(r.parentId)) continue;
+    if (child.parents.length >= 2) throw new Error(`У ${r.childId} больше двух родителей в раскладке`);
+    child.parents.push(r.parentId);
+    if (r.type === 'adoptive') child.adopted = true;
   }
 
-  // Неизвестный второй родитель: один placeholder на известного родителя,
+  // Дети — на союз своих двух родителей. Один известный родитель — placeholder-супруг,
   // общий для всех его детей с неизвестным вторым родителем.
   const placeholderIds = new Set<string>();
-  for (const child of [...drafts.values()]) {
-    if (child.placeholder || child.parents.size !== 1) continue;
-    const [knownId, relType] = [...child.parents.entries()][0];
-    const pid = placeholderId(knownId);
-    let ph = drafts.get(pid);
-    if (!ph) {
-      const known = drafts.get(knownId)!;
-      ph = {
-        id: pid,
-        gender: opposite(known.gender),
-        placeholder: true,
-        parents: new Map(),
-        children: new Map(),
-        spouses: new Map(),
-      };
-      drafts.set(pid, ph);
-      placeholderIds.add(pid);
-      const maxOrder = Math.max(0, ...[...known.spouses.values()].map((s) => s.order));
-      addSpouse(knownId, pid, 'married' as RtRelType, maxOrder + 1);
+  for (const child of [...persons.values()]) {
+    if (child.parents.length === 0) continue;
+    if (child.parents.length === 1) {
+      const known = child.parents[0];
+      const pid = placeholderId(known);
+      if (!persons.has(pid)) {
+        persons.set(pid, {
+          id: pid,
+          gender: opposite(persons.get(known)!.gender),
+          placeholder: true,
+          parents: [],
+          adopted: false,
+        });
+        placeholderIds.add(pid);
+        ensureUnion(known, pid, maxOrder(known) + 1);
+      }
+      child.parents.push(pid);
     }
-    child.parents.set(pid, relType);
-    ph.children.set(child.id, relType);
+    const [a, b] = child.parents;
+    ensureUnion(a, b, unions.has(unionId(a, b)) ? 0 : maxOrder(a) + 1).children.push(child.id);
   }
 
-  // Компоненты связности по рёбрам раскладки (родитель–ребёнок, супруги).
-  const compOf = new Map<string, number>();
+  // Компоненты связности по рёбрам раскладки (родитель–ребёнок, союзы).
+  const adj = new Map<string, string[]>([...persons.keys()].map((id) => [id, []]));
+  const link = (x: string, y: string) => {
+    adj.get(x)!.push(y);
+    adj.get(y)!.push(x);
+  };
+  for (const u of unions.values()) {
+    link(u.a, u.b);
+    for (const c of u.children) link(u.a, c);
+  }
+  const seen = new Set<string>();
   const components: string[][] = [];
-  for (const id of drafts.keys()) {
-    if (compOf.has(id)) continue;
-    const idx = components.length;
+  for (const id of persons.keys()) {
+    if (seen.has(id)) continue;
     const members: string[] = [];
     const stack = [id];
-    compOf.set(id, idx);
+    seen.add(id);
     while (stack.length) {
       const cur = stack.pop()!;
       members.push(cur);
-      const d = drafts.get(cur)!;
-      for (const n of [...d.parents.keys(), ...d.children.keys(), ...d.spouses.keys()]) {
-        if (!compOf.has(n)) {
-          compOf.set(n, idx);
+      for (const n of adj.get(cur)!) {
+        if (!seen.has(n)) {
+          seen.add(n);
           stack.push(n);
         }
       }
     }
     components.push(members);
   }
+  // Основное дерево — самая большая компонента; корень пользователя на это не влияет.
+  components.sort((x, y) => y.length - x.length);
 
-  const toRtNode = (d: Draft): RtNode => {
-    const parentIds = [...d.parents.keys()];
-    const siblings = new Map<string, RtRelType>();
-    for (const pid of parentIds) {
-      for (const sib of drafts.get(pid)!.children.keys()) {
-        if (sib === d.id || siblings.has(sib)) continue;
-        const sibParents = drafts.get(sib)!.parents;
-        const full = parentIds.length === sibParents.size && parentIds.every((p) => sibParents.has(p));
-        siblings.set(sib, (full ? 'blood' : 'half') as RtRelType);
-      }
-    }
-    const rel = (m: Map<string, RtRelType>): RtRelation[] => [...m].map(([id, type]) => ({ id, type }));
-    return {
-      id: d.id,
-      gender: d.gender,
-      parents: rel(d.parents),
-      children: rel(d.children),
-      siblings: rel(siblings),
-      spouses: [...d.spouses]
-        .sort((a, b) => a[1].order - b[1].order)
-        .map(([id, s]) => ({ id, type: s.type })),
-      ...(d.placeholder ? { placeholder: true } : {}),
-    };
-  };
-
-  const rootComp = compOf.get(rootId)!;
-  const mkComponent = (members: string[], root: string): GraphComponent => ({
-    rootId: root,
-    nodes: members.map((id) => toRtNode(drafts.get(id)!)),
-  });
-
-  const islands = components
-    .map((members, idx) => ({ members, idx }))
-    .filter((c) => c.idx !== rootComp)
-    .map(({ members }) => {
-      // Корень острова — первый по порядку во входных данных не-placeholder.
-      const order = new Map(data.persons.map((p, i) => [p.id, i]));
-      const root = members
-        .filter((id) => !placeholderIds.has(id))
-        .sort((a, b) => order.get(a)! - order.get(b)!)[0];
-      return mkComponent(members, root);
-    });
-
-  return {
-    main: mkComponent(components[rootComp], rootId),
-    islands,
-    overlays,
-    placeholderIds,
-  };
+  return { persons, unions: [...unions.values()], components, overlays, placeholderIds };
 }

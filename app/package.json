@@ -10,10 +10,13 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "family-chart": "0.9.0",
-    "relatives-tree": "3.2.2"
+    "d3-dag": "1.2.2",
+    "d3-selection": "3.0.0",
+    "d3-zoom": "3.0.0"
   },
   "devDependencies": {
+    "@types/d3-selection": "3.0.12",
+    "@types/d3-zoom": "3.0.9",
     "typescript": "7.0.2",
     "vite": "8.3.4",
     "vitest": "5.0.5"

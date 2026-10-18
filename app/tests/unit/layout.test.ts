@@ -5,8 +5,9 @@ import { ISLAND_IDS, ROOTS, UNKNOWN_PARENT_CHILD, ivanovBig } from '../fixtures/
 import { placeholderId } from '../../src/tree/graph';
 
 const TIME_LIMIT_MS = 200;
-// Основной движок и фолбэк по плану (раздел 5) проверяются одними и теми же критериями.
-const ENGINES: LayoutEngine[] = ['relatives-tree', 'family-chart'];
+// Фолбэк плана (раздел 5): своя раскладка полного графа поверх d3-dag. relatives-tree и
+// family-chart прошли те же критерии в spike и не прошли «все узлы» (docs/spike.md).
+const ENGINES: LayoutEngine[] = ['d3-dag'];
 
 function overlaps(a: NodeRect, b: NodeRect): boolean {
   return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
@@ -90,5 +91,47 @@ describe.each(CASES)('%s, rootId = %s', (engine, _label, rootId) => {
     expect(layout.overlays.map((o) => o.type).sort()).toEqual(['raised_by', 'step']);
     const edgeSet = new Set(layout.edges.map((e) => `${e.parentId}>${e.childId}`));
     for (const o of layout.overlays) expect(edgeSet.has(`${o.fromId}>${o.toId}`)).toBe(false);
+  });
+});
+
+describe('полный граф: корень влияет только на фокус', () => {
+  const layouts = Object.values(ROOTS).map((rootId) => ({ rootId, layout: layoutTree(ivanovBig, rootId) }));
+  const sig = (l: TreeLayout) =>
+    l.nodes
+      .map((n) => `${n.id}@${n.x.toFixed(1)},${n.y.toFixed(1)}`)
+      .sort()
+      .join('|');
+
+  it('одинаковые узлы и координаты при любом корне', () => {
+    const first = sig(layouts[0].layout);
+    for (const { layout } of layouts) expect(sig(layout)).toBe(first);
+  });
+
+  it('фокус — центр карточки корня', () => {
+    for (const { rootId, layout } of layouts) {
+      const r = layout.nodes.find((n) => n.id === rootId)!;
+      expect(layout.focus).toEqual({ id: rootId, x: r.x + r.w / 2, y: r.y + r.h / 2 });
+    }
+  });
+
+  it('супруги в единственном браке стоят рядом, без карточек между ними', () => {
+    const { layout } = layouts[0];
+    const byId = new Map(layout.nodes.map((n) => [n.id, n]));
+    const deg = new Map<string, number>();
+    for (const u of layout.unions) for (const id of [u.a, u.b]) deg.set(id, (deg.get(id) ?? 0) + 1);
+    const notAdjacent: string[] = [];
+    for (const u of layout.unions) {
+      if (deg.get(u.a) !== 1 || deg.get(u.b) !== 1) continue;
+      const [a, b] = [byId.get(u.a)!, byId.get(u.b)!].sort((p, q) => p.x - q.x);
+      const between = layout.nodes.some((n) => n.y === a.y && n.x > a.x && n.x < b.x);
+      if (a.y !== b.y || between) notAdjacent.push(u.id);
+    }
+    expect(notAdjacent).toEqual([]);
+  });
+
+  it('пересечения линий посчитаны', () => {
+    const { layout } = layouts[0];
+    console.info(`[d3-dag] crossings ${layout.crossings}, size ${layout.width.toFixed(0)}×${layout.height.toFixed(0)}`);
+    expect(Number.isFinite(layout.crossings)).toBe(true);
   });
 });
