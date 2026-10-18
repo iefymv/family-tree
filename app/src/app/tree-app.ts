@@ -13,6 +13,7 @@ import { createAdminScreen } from '../ui/admin';
 import { createEditForm } from '../ui/edit-form';
 import { avatarEl, createSheet, type RelativeGroup } from '../ui/sheet';
 import { createViewer } from '../ui/viewer';
+import '../ui/selection.css';
 import { invalidate } from '../lib/signedUrls';
 import type { Backend } from './backend';
 
@@ -28,7 +29,10 @@ export async function mountTreeApp(app: HTMLElement, backend: Backend): Promise<
   let rootId = profiles.has(backend.me.personId) ? backend.me.personId : family.persons[0]?.id ?? backend.me.personId;
   let layout!: TreeLayout;
   let kin = new Map<string, string>();
+  /** Чья карточка открыта в шторке/панели. */
   let selectedId: string | null = null;
+  /** Кто выбран на дереве (обводка, «+» вокруг, «Открыть карточку»). */
+  let chosenId: string | null = null;
   let picking: ((id: string | null) => void) | null = null;
 
   const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -84,6 +88,17 @@ export async function mountTreeApp(app: HTMLElement, backend: Backend): Promise<
         void addFlow(id.replace(/^unknown-parent:/, ''), 'fill');
         return;
       }
+      // Телефон: первое нажатие — выбрать (обводка и «+» вокруг), второе — открыть карточку.
+      // Компьютер: панель сбоку дерево не закрывает, поэтому карточка открывается сразу.
+      if (!isPhone()) return openPerson(id);
+      if (sheet.isOpen()) {
+        if (selectedId !== id) closePerson(id);
+        return;
+      }
+      if (chosenId === id) openPerson(id);
+      else choose(id);
+    },
+    onOpenCard(id) {
       openPerson(id);
     },
     onAdd(id, kind) {
@@ -150,6 +165,16 @@ export async function mountTreeApp(app: HTMLElement, backend: Backend): Promise<
   function focusPerson(id: string, scale?: number, instant = false) {
     const c = view.centerOf(id);
     if (!c) return;
+    if (sheet.isOpen() && isPhone()) {
+      // Шторка закрывает низ: узел целиком (фото, ФИО, даты) — в верхней видимой части.
+      const r = view.rectOf(id);
+      const a = visibleArea();
+      if (r) {
+        const k = Math.max(0.5, Math.min(1, (a.h - 16) / r.h, (a.w - 16) / r.w));
+        zoomCtl.focusOn(r.x + r.w / 2, r.y + r.h / 2, { scale: k, instant, screen: { x: a.x + a.w / 2, y: a.y + a.h / 2 } });
+        return;
+      }
+    }
     const a = sheet.isOpen() ? sheet.freeArea() : { x: 0, y: 0, w: window.innerWidth, h: window.innerHeight };
     const phone = isPhone();
     // На телефоне со шторкой фото ставим выше, чтобы под ним читались имя и даты.
@@ -159,8 +184,51 @@ export async function mountTreeApp(app: HTMLElement, backend: Backend): Promise<
   }
 
   function select(id: string | null) {
-    view.select(id, id ? canAdd(family, id) : undefined);
+    // Пока на телефоне открыта шторка, «+» на дереве прячем — они были бы под ней; добавлять можно из карточки.
+    const covered = !!id && sheet.isOpen() && isPhone();
+    view.select(id, id && !covered ? canAdd(family, id) : undefined, { openPill: !!id && !sheet.isOpen() });
     requestAnimationFrame(railAvoidChips);
+  }
+
+  /** Видимая часть экрана между верхней панелью и нижними кнопками (или верхом шторки на телефоне). */
+  function visibleArea() {
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    const top = (document.querySelector('.topbar')?.getBoundingClientRect().bottom ?? 80) - 8;
+    let bottom = H;
+    let right = W;
+    if (sheet.isOpen()) {
+      const f = sheet.freeArea();
+      if (isPhone()) bottom = f.y + f.h;
+      else right = f.x + f.w;
+    } else {
+      const dock = document.querySelector('.zoom-controls')?.getBoundingClientRect();
+      if (dock && dock.height) bottom = dock.top;
+    }
+    return { x: 8, y: top, w: right - 16, h: Math.max(120, bottom - top - 8) };
+  }
+
+  /** Подогнать масштаб и сдвиг так, чтобы выбранный узел и все «+» вокруг были видны целиком. */
+  function fitChosen(instant = false) {
+    const b = view.selectionBounds();
+    if (!b) return;
+    const a = visibleArea();
+    const k = Math.max(0.5, Math.min(1, (a.w - 8) / (b.x1 - b.x0), (a.h - 8) / (b.y1 - b.y0)));
+    zoomCtl.focusOn((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, { scale: k, instant, screen: { x: a.x + a.w / 2, y: a.y + a.h / 2 } });
+  }
+
+  /** Выбрать человека на дереве (без карточки): обводка, «+», «Открыть карточку», всё в кадре. */
+  function choose(id: string, instant = false) {
+    if (sheet.isOpen()) {
+      sheet.close();
+      selectedId = null;
+      openSeq++;
+    }
+    chosenId = id;
+    view.highlight(null);
+    select(id);
+    if (instant) fitChosen(true);
+    else requestAnimationFrame(() => fitChosen());
   }
 
   // ——— данные: перечитать после правки ———
@@ -314,10 +382,13 @@ export async function mountTreeApp(app: HTMLElement, backend: Backend): Promise<
     const p = profiles.get(id);
     if (!p) return;
     selectedId = id;
+    chosenId = id;
     view.highlight(null);
-    select(id);
     const ctx = () => ({ isRoot: id === rootId, relation: kin.get(id), can: canAdd(family, id), relatives: relativesOf(id), admin, live });
     sheet.open(p, ctx());
+    // Шторка только что открыта (класс is-open ставится в следующем кадре) — выбираем явно.
+    view.select(id, isPhone() ? undefined : canAdd(family, id), { openPill: false });
+    requestAnimationFrame(railAvoidChips);
     if (fly) requestAnimationFrame(() => focusPerson(id));
     // Полная карточка (факты, документы) догружается и подменяет краткую.
     const seq = ++openSeq;
@@ -330,11 +401,13 @@ export async function mountTreeApp(app: HTMLElement, backend: Backend): Promise<
     );
   }
 
-  function closePerson() {
+  /** Закрыть карточку и вернуться к выбранному на дереве (обводка и «+» снова видны). */
+  function closePerson(next?: string) {
+    const back = next ?? selectedId ?? chosenId ?? rootId;
     sheet.close();
     selectedId = null;
     openSeq++;
-    select(rootId);
+    choose(back);
   }
 
   // ——— правка ———
@@ -453,8 +526,11 @@ export async function mountTreeApp(app: HTMLElement, backend: Backend): Promise<
       say(errMsg(e));
       return;
     }
-    openPerson(id, false);
-    window.setTimeout(() => focusPerson(id), reduceMotion() ? 0 : 120);
+    if (isPhone()) window.setTimeout(() => choose(id), reduceMotion() ? 0 : 120);
+    else {
+      openPerson(id, false);
+      window.setTimeout(() => focusPerson(id), reduceMotion() ? 0 : 120);
+    }
     say('Добавлено на дерево');
   }
 
@@ -595,11 +671,8 @@ export async function mountTreeApp(app: HTMLElement, backend: Backend): Promise<
   function show(id: string) {
     list.hidden = true;
     input.blur();
-    if (sheet.isOpen()) sheet.close();
-    selectedId = null;
-    select(id);
+    choose(id);
     view.highlight(id);
-    requestAnimationFrame(() => focusPerson(id, Math.max(zoomCtl.current().k, START_SCALE)));
   }
 
   input.addEventListener('input', () => {
@@ -669,11 +742,7 @@ export async function mountTreeApp(app: HTMLElement, backend: Backend): Promise<
   }
   refreshHomeThumb();
   const goHome = () => {
-    view.highlight(null);
-    if (sheet.isOpen()) sheet.close();
-    selectedId = null;
-    select(rootId);
-    requestAnimationFrame(() => focusPerson(rootId, START_SCALE));
+    choose(rootId);
   };
   mountZoomControls(app, zoomCtl, goHome, homeThumb);
 
@@ -687,8 +756,7 @@ export async function mountTreeApp(app: HTMLElement, backend: Backend): Promise<
   view.update({ family, layout, profiles, rootId, intro: true });
   buildRail();
   updateCount();
-  select(rootId);
-  focusPerson(rootId, START_SCALE, true);
+  choose(rootId, true);
   document.body.classList.add('ready');
   document.body.dataset.mode = backend.mode;
 
@@ -699,6 +767,7 @@ export async function mountTreeApp(app: HTMLElement, backend: Backend): Promise<
   window.addEventListener('resize', () => {
     relayout();
     if (selectedId) focusPerson(selectedId);
+    else if (chosenId) fitChosen();
   });
 
   new MutationObserver(updateCount).observe(rail, { childList: true });

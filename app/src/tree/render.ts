@@ -115,6 +115,8 @@ export interface TreeHandlers {
   onCardTap(id: string, placeholder: boolean): void;
   onAdd(id: string, kind: AddKind): void;
   onBackgroundTap(): void;
+  /** Нажата таблетка «Открыть карточку» под выбранным узлом. */
+  onOpenCard?(id: string): void;
 }
 
 export interface GenerationMark {
@@ -127,7 +129,10 @@ export interface TreeView {
   svg: SVGSVGElement;
   viewport: SVGGElement;
   update(state: TreeState): void;
-  select(id: string | null, canAdd?: Record<AddKind, boolean>): void;
+  /** Выбрать узел: обводка, «+» вокруг; openPill — показать «Открыть карточку» под ним. */
+  select(id: string | null, canAdd?: Record<AddKind, boolean>, opts?: { openPill?: boolean }): void;
+  /** Рамка выбранного узла с кнопками вокруг (координаты раскладки) или null. */
+  selectionBounds(): { x0: number; y0: number; x1: number; y1: number } | null;
   highlight(id: string | null): void;
   /** Центр фото человека в координатах раскладки. */
   centerOf(id: string): { x: number; y: number } | null;
@@ -184,11 +189,21 @@ export function createTreeView(host: HTMLElement, handlers: TreeHandlers): TreeV
   let gens: GenerationMark[] = [];
   let selected: string | null = null;
   let selectedCan: Record<AddKind, boolean> | undefined;
+  let openPill = false;
+  /** Низ последней строки текста узла (ФИО или даты) от его верха. */
+  const textBottom = new Map<string, number>();
+  /** Рамка выбранного узла вместе с «+» вокруг — в координатах раскладки. */
+  let bounds: { x0: number; y0: number; x1: number; y1: number } | null = null;
   let found: string | null = null;
   const reduce = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
   // ——— события: делегирование ———
   const act = (t: Element): boolean => {
+    const open = t.closest<SVGGElement>('[data-open]');
+    if (open) {
+      handlers.onOpenCard?.(open.dataset.open!);
+      return true;
+    }
     const chip = t.closest<SVGGElement>('[data-add]');
     if (chip) {
       handlers.onAdd(chip.dataset.for!, chip.dataset.add as AddKind);
@@ -248,6 +263,7 @@ export function createTreeView(host: HTMLElement, handlers: TreeHandlers): TreeV
     });
     const d = datesLine(p);
     if (d) el('text', { class: 'dates', x: cx, y: lines.length > 1 ? TEXT.datesY : TEXT.datesY - 23 }, body).textContent = d;
+    textBottom.set(n.id, d ? (lines.length > 1 ? TEXT.datesY : TEXT.datesY - 23) + 6 : TEXT.nameY[lines.length - 1] + 6);
 
     if (n.id === s.rootId) {
       const b = el('g', { class: 'you-badge', transform: `translate(${cx} ${PHOTO_BOTTOM - 2})` }, body);
@@ -406,6 +422,7 @@ export function createTreeView(host: HTMLElement, handlers: TreeHandlers): TreeV
   // ——— зелёные «+» вокруг выбранного: родитель сверху, ребёнок снизу, супруг и брат/сестра по бокам ———
   function drawChips() {
     chipsG.replaceChildren();
+    bounds = null;
     if (!selected || !selectedCan) return;
     const r = rects.get(selected);
     if (!r || r.placeholder) return;
@@ -434,7 +451,26 @@ export function createTreeView(host: HTMLElement, handlers: TreeHandlers): TreeV
     chip('parent', cx, r.y - 30, 'top', 0);
     chip('spouse', cx + R + 40, cy, 'bottom', 60);
     chip('sibling', cx - R - 40, cy, 'bottom', 90);
-    chip('child', cx, r.y + r.h + 26, 'bottom', 120);
+    let bottom = r.y + r.h;
+    if (openPill) {
+      // «Открыть карточку» — сразу под датами; второе нажатие на сам узел делает то же.
+      const label = 'Открыть карточку';
+      const pw = Math.ceil(textWidth(label, '600 18px Onest, system-ui, sans-serif')) + 44;
+      const g = el('g', { class: 'open-pill', transform: `translate(${cx - pw / 2} ${r.y + (textBottom.get(selected) ?? r.h) + 14})`, tabindex: 0, role: 'button', 'aria-label': 'Открыть карточку человека' }, chipsG);
+      g.dataset.open = selected;
+      const inner = el('g', { class: 'chip-body' }, g);
+      inner.style.setProperty('--d', '40ms');
+      el('rect', { width: pw, height: 48, rx: 24 }, inner);
+      el('text', { x: pw / 2, y: 30 }, inner).textContent = label;
+      bottom = Math.max(r.y + (textBottom.get(selected) ?? r.h) + 62, r.y + r.h);
+    }
+    if (selectedCan.child) {
+      // «+ Ребёнок»: кнопка и подпись в одну строку, по центру под узлом.
+      const pw = Math.ceil(textWidth(ADD_LABELS.child, '600 18px Onest, system-ui, sans-serif')) + 28;
+      chip('child', cx - (8 + pw) / 2, bottom + 36, 'right', 120);
+      bounds = { x0: cx - R - 40 - 80, y0: r.y - 30 - 64, x1: cx + R + 40 + 80, y1: bottom + 36 + 26 };
+    } else bounds = { x0: cx - R - 40 - 80, y0: r.y - 30 - 64, x1: cx + R + 40 + 80, y1: bottom };
+    if (!selectedCan.parent) bounds.y0 = r.y - 8;
   }
 
   function update(s: TreeState) {
@@ -496,7 +532,8 @@ export function createTreeView(host: HTMLElement, handlers: TreeHandlers): TreeV
     svg,
     viewport,
     update,
-    select(id, can) {
+    select(id, can, opts) {
+      openPill = !!opts?.openPill;
       if (selected) cardOf.get(selected)?.classList.remove('is-selected');
       selected = id;
       selectedCan = can;
@@ -523,6 +560,7 @@ export function createTreeView(host: HTMLElement, handlers: TreeHandlers): TreeV
       return r ? { x: r.x + r.w / 2, y: r.y + PHOTO_CY } : null;
     },
     rectOf: (id) => rects.get(id) ?? null,
+    selectionBounds: () => bounds,
     generations: () => gens,
   };
 }

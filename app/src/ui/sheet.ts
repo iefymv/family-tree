@@ -51,7 +51,7 @@ const ADD_ITEMS: [AddKind, string][] = [
   ['parent', 'Родителя'],
   ['spouse', 'Супруга'],
   ['child', 'Ребёнка'],
-  ['sibling', 'Брата / сестру'],
+  ['sibling', 'Брата/сестру'],
 ];
 
 export interface RelativeGroup {
@@ -318,6 +318,25 @@ export function createSheet(host: HTMLElement, handlers: SheetHandlers): Sheet {
     actions.append(edit, photo);
     hero.appendChild(actions);
 
+    // «Добавить родственника» — сразу под действиями, те же действия, что «+» на дереве.
+    const addRow = h('div', 'hero-add');
+    addRow.setAttribute('role', 'group');
+    addRow.setAttribute('aria-label', 'Добавить родственника');
+    addRow.appendChild(h('p', 'hero-add-title', 'Добавить родственника'));
+    const addGrid = h('div', 'hero-add-grid');
+    for (const [kind, label] of ADD_ITEMS) {
+      const b = h('button', 'hero-add-btn');
+      b.type = 'button';
+      b.dataset.add = kind;
+      b.append(icon('plus', 'add-ico'), h('span', '', label));
+      b.disabled = !ctx.can[kind];
+      if (b.disabled) b.title = kind === 'parent' ? 'Оба родителя уже есть' : 'Сначала добавьте родителя';
+      b.addEventListener('click', () => handlers.onAdd(p.id, kind));
+      addGrid.appendChild(b);
+    }
+    addRow.appendChild(addGrid);
+    hero.appendChild(addRow);
+
     const tabs = h('div', 'tabs');
     tabs.setAttribute('role', 'tablist');
     for (const [id, label] of TABS) {
@@ -432,19 +451,6 @@ export function createSheet(host: HTMLElement, handlers: SheetHandlers): Sheet {
         sec.appendChild(ul);
         body.appendChild(sec);
       }
-      const addSec = section('Добавить родственника');
-      const grid = h('div', 'add-grid');
-      for (const [kind, label] of ADD_ITEMS) {
-        const b = h('button', 'add-btn');
-        b.type = 'button';
-        b.append(icon('plus', 'add-ico'), h('span', '', label));
-        b.disabled = !ctx.can[kind];
-        if (b.disabled) b.title = kind === 'parent' ? 'Оба родителя уже есть' : 'Сначала добавьте родителя';
-        b.addEventListener('click', () => handlers.onAdd(p.id, kind));
-        grid.appendChild(b);
-      }
-      addSec.appendChild(grid);
-      body.appendChild(addSec);
     } else if (tab === 'gallery') {
       const grid = h('div', 'gallery-grid');
       const main = h('figure', 'g-item g-main');

@@ -1,0 +1,31 @@
+/* Выбор на дереве: «Открыть карточку» под узлом; ряд «Добавить родственника» в карточке. */
+.open-pill { cursor: pointer; }
+.open-pill rect { fill: var(--green-btn); stroke: var(--surface); stroke-width: 3; filter: drop-shadow(0 4px 10px rgba(63, 139, 36, 0.3)); transition: fill 0.2s; }
+.open-pill text { fill: #fff; font: 600 18px var(--font); text-anchor: middle; }
+@media (hover: hover) { .open-pill:hover rect { fill: var(--green-btn-hover); } }
+.open-pill:active .chip-body { transform: scale(0.96); }
+.open-pill:focus-visible rect { stroke: var(--green); stroke-width: 4; }
+
+.hero-add { align-self: stretch; margin-top: 16px; display: grid; gap: 8px; text-align: left; }
+.hero-add-title { margin: 0; font-size: 17px; font-weight: 600; color: var(--ink-2); }
+.hero-add-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.hero-add-btn { min-height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 14px; border-radius: 18px; border: 0; background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--green-200); color: var(--green-700); font-size: 18px; font-weight: 600; text-align: left; cursor: pointer; transition: background 0.2s; }
+.hero-add-btn:hover:not(:disabled) { background: var(--green-50); }
+.hero-add-btn:active:not(:disabled) { transform: scale(0.98); }
+.hero-add-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.hero-add-btn:focus-visible { outline: 3px solid var(--green); outline-offset: 2px; }
+.hero-add-btn .add-ico { width: 30px; height: 30px; border-radius: 50%; background: var(--green); display: grid; place-items: center; flex: none; }
+.hero-add-btn .add-ico svg { width: 18px; height: 18px; fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; display: block; }
+
+/* iOS Safari: нижняя панель браузера не должна прятать кнопки и низ шторки. */
+@media (max-width: 899px) {
+  .sheet { height: calc(94dvh - env(safe-area-inset-top)); }
+}
+.sheet-scroll { padding-bottom: calc(40px + env(safe-area-inset-bottom)); }
+.add-dialog form { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
+.hero-add-btn { gap: 8px; padding: 0 10px; white-space: nowrap; font-size: 17px; }
+.hero-add-btn .add-ico { width: 26px; height: 26px; }
+@media (max-width: 899px) {
+  /* Пока шторка поднята, сообщение — сверху, чтобы не закрывать кнопки карточки. */
+  body.sheet-up .toast { top: calc(12px + env(safe-area-inset-top)); bottom: auto; }
+}
