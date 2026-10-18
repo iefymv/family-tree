@@ -48,7 +48,23 @@ async function start() {
   const fresh = !me;
   if (!me) me = await showLogin(app, wake);
   await mountTreeApp(app, createLiveBackend({ personId: me.personId, displayName: me.displayName, role: me.role }, wake));
-  if (fresh) showWelcomeCard(document.body);
+  if (fresh) showWelcomeWhenLinked();
+}
+
+/**
+ * Приветствие — не поверх баннера «Вы пока не связаны с деревом»: пока баннер виден,
+ * ждём, когда человек свяжет себя с родными (баннер скрывается), и только тогда показываем.
+ */
+function showWelcomeWhenLinked() {
+  const banner = document.querySelector<HTMLElement>('.join-banner');
+  if (!banner || banner.hidden) return showWelcomeCard(document.body);
+  const mo = new MutationObserver(() => {
+    if (!banner.isConnected) return mo.disconnect();
+    if (!banner.hidden) return;
+    mo.disconnect();
+    showWelcomeCard(document.body);
+  });
+  mo.observe(banner, { attributes: true, attributeFilter: ['hidden'] });
 }
 
 start().catch((e: unknown) => {

@@ -237,7 +237,22 @@ export async function mountTreeApp(app: HTMLElement, backend: Backend): Promise<
     if (!b) return;
     const a = visibleArea();
     const k = Math.max(0.5, Math.min(1, (a.w - 8) / (b.x1 - b.x0), (a.h - 8) / (b.y1 - b.y0)));
-    zoomCtl.focusOn((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, { scale: k, instant, screen: { x: a.x + a.w / 2, y: a.y + a.h / 2 } });
+    // Фото человека — в центре видимой части (между верхней панелью/баннером и нижними кнопками);
+    // сдвигаем ровно настолько, чтобы «+» сверху и снизу не вылезли за её края.
+    const c = chosenId ? view.centerOf(chosenId) : null;
+    const wx = c?.x ?? (b.x0 + b.x1) / 2;
+    const wy = c?.y ?? (b.y0 + b.y1) / 2;
+    /** Экранная точка для (w) так, чтобы отрезок [w0, w1] лёг внутрь [lo, hi]; верх важнее низа. */
+    const clampTo = (s: number, lo: number, hi: number, w0: number, w1: number, w: number) => {
+      const over = s + (w1 - w) * k - hi;
+      if (over > 0) s -= over;
+      const under = lo - (s + (w0 - w) * k);
+      if (under > 0) s += under;
+      return s;
+    };
+    const sx = clampTo(a.x + a.w / 2, a.x, a.x + a.w, b.x0, b.x1, wx);
+    const sy = clampTo(a.y + a.h / 2, a.y, a.y + a.h, b.y0, b.y1, wy);
+    zoomCtl.focusOn(wx, wy, { scale: k, instant, screen: { x: sx, y: sy } });
   }
 
   /** Выбрать человека на дереве (без карточки): обводка, «+», «Открыть карточку», всё в кадре. */
