@@ -14,6 +14,7 @@ import { createEditForm } from '../ui/edit-form';
 import { avatarEl, createSheet, type RelativeGroup } from '../ui/sheet';
 import { createViewer } from '../ui/viewer';
 import '../ui/selection.css';
+import { createShareDialog, shareButton } from '../ui/share';
 import { invalidate } from '../lib/signedUrls';
 import type { Backend } from './backend';
 
@@ -204,6 +205,8 @@ export async function mountTreeApp(app: HTMLElement, backend: Backend): Promise<
     } else {
       const dock = document.querySelector('.zoom-controls')?.getBoundingClientRect();
       if (dock && dock.height) bottom = dock.top;
+      const sh = document.querySelector('.share-cta.in-dock')?.getBoundingClientRect();
+      if (sh && sh.height) bottom = Math.min(bottom, sh.top);
     }
     return { x: 8, y: top, w: right - 16, h: Math.max(120, bottom - top - 8) };
   }
@@ -605,8 +608,20 @@ export async function mountTreeApp(app: HTMLElement, backend: Backend): Promise<
   menuBtn.addEventListener('click', () => toggleMenu());
   menuWrap.append(menuBtn, menu);
 
-  header.append(brand, form, menuWrap);
+  // «Поделиться с родственником»: в верхней панели (компьютер), над нижними кнопками (телефон) и в меню.
+  const share = createShareDialog(app, {
+    say,
+    name: () => profiles.get(backend.me.personId)?.given ?? '', // имени нет — приветствие без него
+  });
+  const openShare = () => {
+    if (sheet.isOpen()) closePerson();
+    share.open();
+  };
+  const shareTop = shareButton(openShare, 'in-top');
+  header.append(brand, form, shareTop, menuWrap);
   app.appendChild(header);
+  app.appendChild(shareButton(openShare, 'in-dock'));
+  menuItem('Поделиться с родственником', openShare);
 
   const adminScreen = admin
     ? createAdminScreen(app, {

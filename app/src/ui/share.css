@@ -1,0 +1,59 @@
+/* «Поделиться с родственником»: заметная зелёная кнопка и окно с готовым приглашением. */
+.share-cta { min-height: 52px; display: inline-flex; align-items: center; gap: 10px; padding: 0 22px 0 16px; border: 0; border-radius: 26px; background: var(--green-btn); color: #fff; font: 600 18px var(--font); white-space: nowrap; cursor: pointer; box-shadow: 0 6px 18px rgba(63, 139, 36, 0.32); transition: background 0.2s, transform 0.12s; }
+.share-cta svg { width: 24px; height: 24px; flex: none; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.share-cta:hover { background: var(--green-btn-hover); }
+.share-cta:active { transform: scale(0.97); }
+.share-cta:focus-visible { outline: 3px solid var(--green); outline-offset: 3px; }
+/* В верхней панели — на компьютере; на телефоне — над нижними кнопками. */
+.share-cta.in-top { margin-left: auto; }
+.share-cta.in-dock { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(100px + env(safe-area-inset-bottom)); z-index: 2; min-height: 56px; font-size: 18px; }
+.share-cta.in-dock:active { transform: translateX(-50%) scale(0.97); }
+@media (max-width: 899px) { .share-cta.in-top { display: none; } }
+@media (min-width: 900px) { .share-cta.in-dock { display: none; } }
+body.sheet-up .share-cta.in-dock, body.picking .share-cta.in-dock { display: none; }
+
+.share-dialog { border: 0; padding: 0; background: var(--surface); color: var(--ink); width: 100%; max-width: 100%; margin: auto 0 0; border-radius: 28px 28px 0 0; box-shadow: var(--shadow-2); max-height: calc(96dvh - env(safe-area-inset-top)); }
+.share-dialog[open] { animation: sheet-up 0.4s var(--ease); }
+.share-dialog::backdrop { background: rgba(20, 30, 15, 0.38); backdrop-filter: blur(3px); }
+.share-box { display: flex; flex-direction: column; gap: 14px; padding: 22px 20px calc(22px + env(safe-area-inset-bottom)); overflow-y: auto; max-height: calc(96dvh - env(safe-area-inset-top)); }
+.share-box header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.share-box h2 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.01em; }
+.share-close { width: 48px; height: 48px; flex: none; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--surface-2); cursor: pointer; }
+.share-close svg { width: 24px; height: 24px; fill: none; stroke: var(--ink-2); stroke-width: 2.2; stroke-linecap: round; }
+.share-close span { display: none; }
+.share-lead { margin: 0; font-size: 18px; line-height: 1.45; color: var(--ink-2); }
+.share-text { width: 100%; min-height: 220px; padding: 14px 16px; font: 400 18px/1.5 var(--font); color: var(--ink); background: var(--surface-2); border: 1.5px solid var(--line); border-radius: 18px; resize: vertical; outline: none; }
+.share-text:focus { border-color: var(--green); box-shadow: 0 0 0 4px var(--green-100); }
+.share-pw { display: grid; gap: 8px; }
+.share-check { min-height: 48px; display: flex; align-items: center; gap: 12px; font-size: 18px; font-weight: 500; cursor: pointer; }
+.share-check input { width: 24px; height: 24px; margin: 0; accent-color: var(--green-btn); flex: none; }
+.share-pw-field { display: flex; flex-direction: column; gap: 6px; }
+.share-pw-field[hidden] { display: none; }
+.share-pw-field span { font-size: 16px; font-weight: 500; color: var(--ink-2); }
+.share-pw-field input { height: 56px; padding: 0 16px; font-size: 18px; border-radius: 16px; border: 1.5px solid var(--line); background: var(--surface); outline: none; }
+.share-pw-field input:focus { border-color: var(--green); box-shadow: 0 0 0 4px var(--green-100); }
+.share-note { margin: 0; font-size: 18px; line-height: 1.4; color: var(--ink-3); }
+.share-actions { display: grid; grid-template-columns: 1.4fr 1fr; gap: 10px; }
+.share-actions .btn { min-height: 60px; font-size: 19px; border-radius: 30px; }
+.share-actions .btn svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.share-quick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.share-link { min-height: 56px; display: flex; align-items: center; justify-content: center; gap: 10px; border-radius: 28px; font-size: 18px; font-weight: 600; text-decoration: none; color: #fff; }
+.share-link svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.share-wa { background: #1f8f4e; }
+.share-tg { background: #2a7fb8; }
+.share-link:focus-visible { outline: 3px solid var(--green); outline-offset: 2px; }
+@media (min-width: 900px) {
+  .share-dialog { max-width: 600px; margin: auto; border-radius: 28px; }
+  .share-dialog[open] { animation: pop-in 0.3s var(--ease); }
+  .share-box { padding: 26px 28px 28px; max-height: 90dvh; }
+}
+.share-status { margin: -4px 0 0; min-height: 0; max-height: 0; overflow: hidden; padding: 0 16px; border-radius: 16px; font-size: 18px; font-weight: 600; line-height: 1.4; color: var(--green-700); background: var(--green-50); transition: max-height 0.25s var(--ease), padding 0.25s var(--ease); }
+.share-status.show { max-height: 120px; padding: 12px 16px; }
+.share-status:not(.ok) { color: var(--ink-2); background: var(--surface-2); }
+.share-dialog { overflow: hidden; box-sizing: border-box; }
+.share-box { width: 100%; min-width: 0; overflow-x: hidden; }
+.share-box > * { min-width: 0; }
+.share-actions .btn, .share-link { min-width: 0; padding: 0 14px; }
+@media (max-width: 899px) {
+  .share-actions { grid-template-columns: 1fr; }
+}
