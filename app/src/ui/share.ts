@@ -46,6 +46,8 @@ export interface ShareOptions {
   /** Имя того, кто приглашает (given_name); пусто — приветствие без имени. */
   name: () => string;
   say: (text: string) => void;
+  /** Общий пароль с сервера — подставляется в приглашение сразу (только для вошедших). */
+  password?: () => Promise<string | null>;
 }
 
 function btn(cls: string, html: string, label: string): HTMLButtonElement {
@@ -246,6 +248,13 @@ export function createShareDialog(host: HTMLElement, opts: ShareOptions) {
       dlg.showModal();
       area.scrollTop = 0;
       requestAnimationFrame(() => send.focus());
+      void opts.password?.().then((v) => {
+        if (!v || !dlg.open || cb.checked) return;
+        cb.checked = true;
+        pw.value = v;
+        pwField.hidden = false;
+        syncPassword();
+      });
     },
     close: shut,
     isOpen: () => dlg.open,
