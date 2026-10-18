@@ -18,7 +18,8 @@
     "d3-dag": "1.2.2",
     "d3-interpolate": "3.0.1",
     "d3-selection": "3.0.0",
-    "d3-zoom": "3.0.0"
+    "d3-zoom": "3.0.0",
+    "heic2any": "0.0.4"
   },
   "devDependencies": {
     "@playwright/test": "1.64.1",

@@ -188,13 +188,13 @@ export function createSheet(host: HTMLElement, handlers: SheetHandlers): Sheet {
 
   const fileInput = h('input');
   fileInput.type = 'file';
-  fileInput.accept = 'image/*';
+  fileInput.accept = 'image/*,.heic,.heif';
   fileInput.hidden = true;
   fileInput.setAttribute('data-testid', 'photo-input');
   root.appendChild(fileInput);
   const docInput = h('input');
   docInput.type = 'file';
-  docInput.accept = 'image/*,application/pdf';
+  docInput.accept = 'image/*,.heic,.heif,application/pdf';
   docInput.multiple = true;
   docInput.hidden = true;
   docInput.setAttribute('data-testid', 'doc-input');

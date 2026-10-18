@@ -17,9 +17,17 @@ async function decode(file: Blob & { name?: string }): Promise<ImageBitmap> {
   try {
     return await createImageBitmap(file, { imageOrientation: 'from-image' });
   } catch {
+    // iPhone иногда отдаёт HEIC без типа и с другим именем — пробуем перевод в любом случае.
+  }
+  // Фото с iPhone (HEIC): Chrome и Firefox его не читают — переводим в JPEG в браузере.
+  try {
+    const { default: heic2any } = await import('heic2any');
+    const out = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.92 });
+    return await createImageBitmap(Array.isArray(out) ? out[0] : out, { imageOrientation: 'from-image' });
+  } catch {
     throw new ImageError(isHeic(file)
-      ? 'Этот браузер не открывает HEIC. Сохраните фото как JPEG (на iPhone: Настройки → Камера → Форматы → «Наиболее совместимый»)'
-      : 'Не удалось прочитать изображение');
+      ? 'Не удалось открыть фото HEIC. Попробуйте Safari или сохраните фото как JPEG'
+      : 'Не удалось прочитать изображение. Подойдут JPEG, PNG, WebP или фото с iPhone (HEIC)');
   }
 }
 
