@@ -1,0 +1,31 @@
+{
+  "admin_ref": "seedtest-ivanov-ilya",
+  "source_default": "Вымышленный семейный архив Ивановых",
+  "people": [
+    { "ref": "seedtest-ivanov-semen", "surname": "Иванов", "given_name": "Семён", "patronymic": "Петрович", "sex": "m",
+      "birth_date_text": "20–25.05.1898", "birth_place": "д. Липовка", "death_date_text": "1965", "death_place": "г. Тверь",
+      "occupation": "кузнец", "life_story": "Вымышленный прадед.", "needs_check": true,
+      "name_variants": [{ "surname": "Иванов", "given_name": "Симеон", "note": "в метрике" }, "Сеня"],
+      "documents": ["scan-1.jpg", "scan-2.jpg"], "documents_caption": "Вымышленные сканы" },
+    { "ref": "seedtest-ivanova-anna", "surname": "Иванова", "given_name": "Анна", "patronymic": "Михайловна", "maiden_name": "Петрова",
+      "sex": "f", "birth_date_text": "~1902", "death_date_text": "осенью, точно неизвестно" },
+    { "ref": "seedtest-ivanov-nikolai", "surname": "Иванов", "given_name": "Николай", "patronymic": "Семёнович", "sex": "m",
+      "birth_date_text": "1898 (ранее 1891)", "notes": "Вымышленный." },
+    { "ref": "seedtest-ivanova-tetya", "surname": "Иванова", "given_name": "Дарья", "sex": "f" },
+    { "ref": "seedtest-placeholder-father", "sex": "m", "is_placeholder": true, "needs_check": true },
+    { "ref": "seedtest-ivanov-ilya", "surname": "Иванов", "given_name": "Илья", "sex": "m", "birth_date_text": "12.03.1985" }
+  ],
+  "relations": [
+    { "kind": "spouse", "a": "seedtest-ivanova-anna", "b": "seedtest-ivanov-semen" },
+    { "kind": "parent", "parent": "seedtest-ivanov-semen", "child": "seedtest-ivanov-nikolai" },
+    { "kind": "parent", "parent": "seedtest-ivanova-anna", "child": "seedtest-ivanov-nikolai", "certainty": "probable" },
+    { "kind": "parent", "parent": "seedtest-ivanova-tetya", "child": "seedtest-ivanov-nikolai", "parent_type": "raised_by" },
+    { "kind": "parent", "parent": "seedtest-placeholder-father", "child": "seedtest-ivanova-anna", "certainty": "uncertain" },
+    { "kind": "parent", "parent": "seedtest-ivanov-nikolai", "child": "seedtest-ivanov-ilya" }
+  ],
+  "facts": [
+    { "person": "seedtest-ivanov-semen", "kind": "military", "value": "Вымышленная служба" },
+    { "person": "seedtest-ivanov-semen", "kind": "residence", "value": "д. Липовка", "source": "Вымышленная метрика", "certainty": "known" },
+    { "person": "seedtest-ivanova-anna", "kind": "occupation", "value": "учительница", "certainty": "probable" }
+  ]
+}
