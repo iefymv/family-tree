@@ -12,7 +12,7 @@ const COPY_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8"
 const CLOSE_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
 
 export const PASSWORD_LATER = 'я скажу его тебе отдельно';
-export const passwordLine = (password: string): string => (password.trim() ? `пароль: ${password.trim()}` : PASSWORD_LATER);
+export const passwordLine = (password: string): string => (password.trim() ? password.trim() : PASSWORD_LATER);
 
 /** Текст приглашения. */
 export function inviteText(url: string, password = '', name = ''): string {

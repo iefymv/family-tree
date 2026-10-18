@@ -20,7 +20,7 @@ describe('приглашение', () => {
   it('пароль попадает только если вписан', () => {
     expect(passwordLine('')).toBe(PASSWORD_LATER);
     expect(passwordLine('  ')).toBe(PASSWORD_LATER);
-    expect(inviteText(URL, 'ромашка')).toContain('семейный пароль — пароль: ромашка\n');
+    expect(inviteText(URL, 'ромашка')).toContain('семейный пароль — ромашка\n');
   });
   it('ссылки WhatsApp и Telegram кодируют текст', () => {
     const t = inviteText(URL);
