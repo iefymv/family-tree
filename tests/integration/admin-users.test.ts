@@ -145,12 +145,16 @@ describe('admin-users', () => {
     assert.match(String(r.json.error), /Недопустимый символ/);
   });
 
-  test('reset_password: старый пароль перестаёт работать, новый работает', async () => {
+  test('reset_password: старый пароль перестаёт работать, новый работает; семейный вход закрывается', async () => {
+    const { service } = await import('./_local.ts');
+    await service.from('members').update({ family_login: true }).eq('user_id', petr.userId);
     const fresh = newPw();
     const r = await callFn({ action: 'reset_password', user_id: petr.userId, password: fresh }, adminToken);
     assert.equal(r.status, 200, JSON.stringify(r.json));
     assert.ok((await signInClient(toEmail(petr.login), petr.password)).error, 'старый пароль должен отклоняться');
     assert.equal((await signInClient(toEmail(petr.login), fresh)).error, null);
+    const { data: m } = await service.from('members').select('family_login').eq('user_id', petr.userId).single();
+    assert.equal(m?.family_login, false, 'свой пароль от админа — семейный к учётке больше не подходит');
     petr.password = fresh;
   });
 

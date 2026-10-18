@@ -1,4 +1,6 @@
 // Вымышленная семья Ивановых из supabase/seed.sql и роли в сценариях (как в плане, раздел 8).
+import { readFileSync } from 'node:fs';
+
 export const SEED = Array.from({ length: 12 }, (_, i) => `00000000-0000-4000-8000-${String(i + 1).padStart(12, '0')}`);
 export const P = {
   semen: SEED[0], // прадед
@@ -24,9 +26,15 @@ export const LOGINS = {
 } as const;
 
 /** Карточки, к которым e2e привязывает входы. */
-export const E2E_PERSONS = [P.ilya, P.petr, P.olga, P.andrei, P.ksenia];
+export const E2E_PERSONS = [P.ilya, P.petr, P.olga, P.andrei, P.ksenia, P.matvei, P.elena];
 
 /** Имена из фикстуры — для проверки «без входа не видно ни одного имени». */
 export const SEED_NAMES = ['Семён', 'Анна', 'Николай', 'Мария', 'Пётр', 'Ольга', 'Елена', 'Илья', 'Андрей', 'Ксения', 'Матвей', 'Иванов', 'Петров', 'Сидоров'];
 
 export const pw = (role: 'admin' | 'petr' | 'olga') => process.env[`E2E_PW_${role.toUpperCase()}`]!;
+
+/** Тестовый семейный пароль локальных функций (генерирует serve-functions; настоящий сюда не попадает). */
+export const familyPw = () => readFileSync(new URL('../../../../supabase/.temp/family-password.test', import.meta.url), 'utf8').trim();
+
+/** Самодобавленные семейным входом в сценарии 13 (вымышленные); их входы и карточки убираются после прогона. */
+export const SELF_ADDED_LOGINS = ['ярослав иванов', 'всеволод иванов'];

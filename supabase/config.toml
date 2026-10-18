@@ -419,3 +419,7 @@ enabled = true
 # поэтому проверка на шлюзе выключена.
 [functions.admin-users]
 verify_jwt = false
+
+# family-login вызывается до входа (JWT пользователя ещё нет); сама проверяет семейный пароль.
+[functions.family-login]
+verify_jwt = false

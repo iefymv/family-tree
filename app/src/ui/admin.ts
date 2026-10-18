@@ -187,6 +187,7 @@ export function createAdminScreen(host: HTMLElement, deps: AdminDeps) {
     const top = h('div', 'am-text');
     top.appendChild(h('span', 'am-name', `${m.display_name} — ${personName(m.person_id)}`));
     top.appendChild(h('span', 'am-meta', `вход: «${m.login}» · ${m.role === 'admin' ? 'администратор' : 'родственник'}${m.disabled ? ' · отключён' : ''}`));
+    if (m.family_login) top.appendChild(h('span', 'am-badge', 'семейный вход'));
     li.appendChild(top);
     const acts = h('div', 'am-actions');
     const reset = btn('Сменить пароль');

@@ -19,6 +19,8 @@ export default defineConfig({
   globalTeardown: './tests/e2e/support/global-teardown.ts',
   use: {
     baseURL: `http://localhost:${PORT}`,
+    // Приветствие на дереве уже закрыто; сценарий 13 проверяет его со свежим хранилищем.
+    storageState: { cookies: [], origins: [{ origin: `http://localhost:${PORT}`, localStorage: [{ name: 'family-tree.welcome-dismissed', value: '1' }] }] },
     locale: 'ru-RU',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',

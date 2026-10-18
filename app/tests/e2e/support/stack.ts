@@ -1,10 +1,12 @@
 // Подготовка и уборка данных e2e секретным ключом локального стека.
 // Снимок вымышленной семьи из seed.sql делается до прогона и восстанавливается после:
 // всё, что сценарии добавили или поменяли, исчезает.
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { toEmail } from '../../../src/lib/auth';
-import { E2E_PERSONS, SEED } from './cast';
-import { localEnv } from './env';
+import { E2E_PERSONS, SEED, SELF_ADDED_LOGINS } from './cast';
+import { localEnv, ROOT } from './env';
 
 const noSession = { auth: { persistSession: false, autoRefreshToken: false } };
 export function service(): SupabaseClient {
@@ -18,10 +20,25 @@ async function check<T>(p: PromiseLike<{ data: T; error: unknown }>): Promise<T>
   return data;
 }
 
-/** Удаляет входы, привязанные к e2e-карточкам (остатки прошлых прогонов), вместе с auth-пользователями. */
+/**
+ * Входы e2e: привязанные к e2e-карточкам и самодобавленные семейным входом в сценарии 13
+ * (логин из SELF_ADDED_LOGINS, семейная учётка, карточку создал сам этот пользователь).
+ */
+async function e2eMembers(s: SupabaseClient): Promise<string[]> {
+  const byCard = (await check(s.from('members').select('user_id').in('person_id', E2E_PERSONS))) as { user_id: string }[];
+  return [...new Set([...byCard.map((m) => m.user_id), ...(await selfAddedUserIds(s))])];
+}
+
+async function selfAddedUserIds(s: SupabaseClient): Promise<string[]> {
+  const self = (await check(s.from('members').select('user_id, person_id').in('login', SELF_ADDED_LOGINS).eq('family_login', true))) as { user_id: string; person_id: string }[];
+  if (!self.length) return [];
+  const authors = (await check(s.from('people').select('id, created_by').in('id', self.map((m) => m.person_id)))) as { id: string; created_by: string | null }[];
+  return self.filter((m) => authors.some((p) => p.id === m.person_id && p.created_by === m.user_id)).map((m) => m.user_id);
+}
+
+/** Удаляет входы e2e (остатки прошлых прогонов) вместе с auth-пользователями. */
 export async function dropE2EMembers(s: SupabaseClient): Promise<string[]> {
-  const rows = await check(s.from('members').select('user_id').in('person_id', E2E_PERSONS));
-  const ids = (rows as { user_id: string }[]).map((r) => r.user_id);
+  const ids = await e2eMembers(s);
   if (ids.length) await check(s.from('client_errors').delete().in('user_id', ids));
   for (const id of ids) {
     const { error } = await s.auth.admin.deleteUser(id); // members — каскадом
@@ -77,7 +94,15 @@ export async function snapshot(s: SupabaseClient): Promise<Snapshot> {
 
 /** id участников, чьи входы привязаны к e2e-карточкам (созданы setup или сценарием 1). */
 export async function e2eUserIds(s: SupabaseClient): Promise<string[]> {
-  return ((await check(s.from('members').select('user_id').in('person_id', E2E_PERSONS))) as { user_id: string }[]).map((r) => r.user_id);
+  return e2eMembers(s);
+}
+
+/** Неудачные попытки семейного входа за время прогона (счётчик в непубличной схеме — через psql контейнера). */
+export function dropFamilyLoginAttempts(since: string): void {
+  const project = /^project_id\s*=\s*"([^"]+)"/m.exec(readFileSync(`${ROOT}supabase/config.toml`, 'utf8'))?.[1];
+  if (!/^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(since)) throw new Error('since: ISO-время');
+  execFileSync('docker', ['exec', '-i', `supabase_db_${project}`, 'psql', '-U', 'postgres', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-q'],
+    { input: `delete from private.family_login_attempts where at >= '${since}';`, stdio: ['pipe', 'ignore', 'pipe'] });
 }
 
 /**
@@ -104,7 +129,15 @@ export async function restore(s: SupabaseClient, snap: Snapshot, rpcAs: Supabase
   if (docIds.length) await check(s.from('documents').delete().in('id', docIds));
   const paths = docs.flatMap((d) => [d.storage_path, d.storage_path.replace(/(\.[a-z0-9]+)?$/i, '_thumb.jpg')]);
   if (paths.length) await s.storage.from('documents').remove(paths);
-  if (madePeople.length) await check(s.from('people').delete().in('id', madePeople));
+  if (madePeople.length) {
+    // Входы, привязанные к удаляемым карточкам (самодобавленные семейным входом), — сначала они: members ссылается на карточку.
+    const linked = (await check(s.from('members').select('user_id').in('person_id', madePeople))) as { user_id: string }[];
+    for (const m of linked) {
+      const { error } = await s.auth.admin.deleteUser(m.user_id);
+      if (error) throw error;
+    }
+    await check(s.from('people').delete().in('id', madePeople));
+  }
 
   // Вымышленная семья seed.sql: поля, мягкое удаление, убранные связи и факты.
   for (const row of snap.people) {

@@ -30,6 +30,8 @@ const createdUsers = new Set<string>();
 const createdPeople = new Set<string>();
 
 export function trackUser(id: string): void { createdUsers.add(id); }
+/** Человек, созданный не makePerson (например, самодобавлением через family-login). */
+export function trackPerson(id: string): void { createdPeople.add(id); }
 
 export async function makePerson(given: string, surname: string): Promise<string> {
   const { data, error } = await service.from('people')
@@ -100,6 +102,13 @@ export async function cleanup(): Promise<void> {
   }
   for (const id of createdUsers) await service.auth.admin.deleteUser(id); // members удаляются каскадом
   if (ids.length) {
+    const list = `(${ids.join(',')})`;
+    const { data: rels } = await service.from('relations').select('id').or(`from_person.in.${list},to_person.in.${list}`);
+    const relIds = (rels ?? []).map((r) => r.id);
+    if (relIds.length) {
+      await service.from('relations').delete().in('id', relIds);
+      await service.from('edits').delete().eq('table_name', 'relations').in('row_id', relIds);
+    }
     await service.from('people').delete().in('id', ids);
     await service.from('edits').delete().eq('table_name', 'people').in('row_id', ids);
   }

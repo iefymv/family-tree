@@ -124,6 +124,9 @@ async function resetPassword(body: Record<string, unknown>) {
     console.error('reset_password failed:', error.code);
     throw new HttpError(500, 'Не удалось сменить пароль');
   }
+  // Свой пароль от админа: семейный пароль к этой учётке больше не подходит.
+  const { error: fErr } = await admin.from('members').update({ family_login: false }).eq('user_id', id);
+  if (fErr) throw new HttpError(500, 'Не удалось изменить участника');
   return { status: 200, body: { ok: true } };
 }
 

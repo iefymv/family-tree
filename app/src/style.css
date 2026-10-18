@@ -418,13 +418,34 @@ body.sheet-up .zoom-controls { opacity: 0; transform: translate(-50%, 24px); poi
 .menu-item:hover, .menu-item:focus-visible { background: var(--green-50); outline: none; }
 
 /* Экран входа */
-.login { position: fixed; inset: 0; overflow-y: auto; display: grid; place-items: center; padding: 24px 16px calc(24px + env(safe-area-inset-bottom)); background: radial-gradient(900px 500px at 50% -10%, var(--green-50), transparent 70%), var(--bg); }
-.login-card { width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 16px; padding: 28px 22px; background: var(--surface); border: 1px solid var(--line); border-radius: 28px; box-shadow: var(--shadow-2); }
+.login { position: fixed; inset: 0; overflow-y: auto; display: grid; place-items: start center; padding: 24px 16px calc(24px + env(safe-area-inset-bottom)); background: radial-gradient(900px 500px at 50% -10%, var(--green-50), transparent 70%), var(--bg); }
+.login-card { margin-block: auto; width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 16px; padding: 28px 22px; background: var(--surface); border: 1px solid var(--line); border-radius: 28px; box-shadow: var(--shadow-2); }
 .login-mark { align-self: center; width: 64px; height: 64px; border-radius: 20px; }
 .login-mark svg { width: 36px; height: 36px; }
 .login-card h1 { margin: 0; text-align: center; font-size: 28px; font-weight: 700; letter-spacing: -0.015em; }
 .login-sub { margin: -6px 0 4px; text-align: center; font-size: 18px; line-height: 1.45; color: var(--ink-2); }
 .login-hint { margin: 0; text-align: center; font-size: 18px; line-height: 1.45; color: var(--ink-3); }
+.login-welcome { display: grid; gap: 10px; }
+.login-welcome[hidden], .login-step[hidden] { display: none; }
+.welcome-lead { margin: 0; font-size: 20px; line-height: 1.45; color: var(--ink); }
+.welcome-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.welcome-list li { position: relative; padding-left: 26px; font-size: 20px; line-height: 1.4; color: var(--ink); }
+.welcome-list li::before { content: ''; position: absolute; left: 6px; top: 0.55em; width: 9px; height: 9px; border-radius: 50%; background: var(--green); }
+.welcome-closing { margin: 0; font-size: 18px; line-height: 1.45; color: var(--ink-3); }
+.login-welcome .welcome-title, .login-welcome .welcome-lead { text-align: center; }
+.login-step { display: flex; flex-direction: column; gap: 16px; }
+.login-link-title { margin: 0; font-weight: 600; color: var(--ink); }
+.login-choices { margin: 0; padding: 0; border: 0; display: grid; gap: 8px; min-width: 0; }
+.login-choices legend { padding: 0 0 6px; font-size: 18px; font-weight: 500; color: var(--ink-2); }
+.login-choices-row { grid-template-columns: 1fr 1fr; }
+.login-choice { min-height: 52px; display: flex; align-items: center; gap: 12px; padding: 0 16px; border-radius: 16px; background: var(--surface-2); box-shadow: inset 0 0 0 1.5px var(--line); font-size: 18px; cursor: pointer; }
+.login-choice:has(input:checked) { background: var(--green-50); box-shadow: inset 0 0 0 2px var(--green); color: var(--green-700); font-weight: 600; }
+.login-choice input { width: 22px; height: 22px; margin: 0; accent-color: var(--green-btn); flex: none; }
+.login-card > .btn[hidden], .login-hint[hidden] { display: none; }
+/* Приветствие на дереве после первого входа (закрывается, запоминается на устройстве) */
+.welcome-card { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 7; width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 140px); overflow-y: auto; display: grid; gap: 12px; padding: 22px 22px 18px; border-radius: 24px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-2); }
+.welcome-card .welcome-title { margin: 0; font-size: 22px; font-weight: 700; }
+.welcome-card .btn { justify-self: end; }
 .btn-big { min-height: 60px; font-size: 20px; border-radius: 30px; }
 .form-error { margin: 0; padding: 12px 16px; border-radius: 16px; background: color-mix(in srgb, #b3261e 10%, var(--surface)); color: #8f1d17; font-size: 18px; line-height: 1.4; }
 .form-error[hidden], .form-ok[hidden] { display: none; }
@@ -483,6 +504,7 @@ body.sheet-up .zoom-controls { opacity: 0; transform: translate(-50%, 24px); poi
 .am-text { display: flex; flex-direction: column; flex: 1 1 220px; min-width: 0; }
 .am-name { font-size: 18px; font-weight: 600; word-break: break-word; }
 .am-meta { font-size: 16px; color: var(--ink-3); word-break: break-word; }
+.am-badge { align-self: flex-start; margin-top: 4px; padding: 2px 12px; border-radius: 14px; background: var(--green-100); color: var(--green-700); font-size: 18px; font-weight: 600; }
 .am-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .am-reset { flex-basis: 100%; align-items: flex-end; }
 

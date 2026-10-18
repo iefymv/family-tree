@@ -2,12 +2,13 @@
 import { readFileSync, rmSync } from 'node:fs';
 import { SNAP_FILE } from './global-setup';
 import { LOGINS } from './cast';
-import { dropE2EMembers, e2eUserIds, restore, service, signedIn, type Snapshot } from './stack';
+import { dropE2EMembers, dropFamilyLoginAttempts, e2eUserIds, restore, service, signedIn, type Snapshot } from './stack';
 
 export default async function globalTeardown() {
   const s = service();
   const snap = JSON.parse(readFileSync(SNAP_FILE, 'utf8')) as Snapshot;
   await restore(s, snap, await signedIn(LOGINS.admin, process.env.E2E_PW_ADMIN!), await e2eUserIds(s));
   await dropE2EMembers(s);
+  dropFamilyLoginAttempts(snap.at);
   rmSync(SNAP_FILE, { force: true });
 }

@@ -1,7 +1,8 @@
 // Edge Functions для e2e. Печатает «E2E functions ready», когда функция отвечает (401 без входа).
 // Свой `supabase functions serve` запускается, только если функции ещё никто не обслуживает.
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,7 +20,14 @@ const probe = async () => {
 // (EdgeRuntimeContainerCrashedError, exit 137), и функция отвечает 503. Если функции уже обслуживаются
 // (например, `npm run functions:serve` для показа), используем их и ничего не запускаем и не останавливаем.
 // CORS локально не мешает: шлюз Kong сам ставит Access-Control-Allow-Origin: *.
+// Тестовый семейный пароль (не настоящий): тот же файл пишет scripts/serve-functions.sh, тесты читают его.
+const familyFile = fileURLToPath(new URL('../../../../supabase/.temp/family-password.test', import.meta.url));
 const already = await probe();
+if (already === 401 && !existsSync(familyFile)) {
+  console.error('Функции уже запущены, но без тестового семейного пароля (нет supabase/.temp/family-password.test). ' +
+    'Перезапустите их через `npm run functions:serve` или остановите, чтобы e2e запустил свои.');
+  process.exit(1);
+}
 if (already === 401) {
   console.log('E2E functions ready (уже запущены — используем их)');
   setInterval(() => {}, 1 << 30);
@@ -45,7 +53,10 @@ const root = fileURLToPath(new URL('../../../../', import.meta.url));
 const port = process.env.E2E_PORT ?? '4174';
 const dir = mkdtempSync(join(tmpdir(), 'ft-e2e-fn-'));
 const envFile = join(dir, 'env');
-writeFileSync(envFile, `ALLOWED_ORIGINS=http://localhost:${port},http://127.0.0.1:${port}\n`);
+const family = `test-${randomBytes(12).toString('hex')}`;
+mkdirSync(join(root, 'supabase/.temp'), { recursive: true });
+writeFileSync(familyFile, family, { mode: 0o600 });
+writeFileSync(envFile, `ALLOWED_ORIGINS=http://localhost:${port},http://127.0.0.1:${port}\nFAMILY_PASSWORD=${family}\n`, { mode: 0o600 });
 const child = spawn('supabase', ['functions', 'serve', '--env-file', envFile], { cwd: root, stdio: ['ignore', 'inherit', 'inherit'] });
 const stop = () => {
   child.kill('SIGTERM');

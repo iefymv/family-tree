@@ -12,6 +12,8 @@ export interface MemberRow {
   role: Role;
   disabled: boolean;
   created_at: string;
+  /** Учётка создана семейным входом и живёт на семейном пароле. */
+  family_login: boolean;
 }
 
 export class AdminError extends Error {

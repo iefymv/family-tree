@@ -7,6 +7,7 @@ import { installErrorReporting, reportError } from './lib/errors';
 import { getMe } from './lib/session';
 import { createWake } from './ui/wake';
 import { showLogin } from './ui/login';
+import { showWelcomeCard } from './ui/welcome';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 const hasServer = !!import.meta.env.VITE_SUPABASE_URL && !!import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -44,8 +45,10 @@ async function start() {
   const wake = createWake(document.body);
   // Без сессии в сеть за данными не ходим вовсе: сначала экран входа.
   let me = await wake.run(() => getMe()).catch(() => null);
+  const fresh = !me;
   if (!me) me = await showLogin(app, wake);
   await mountTreeApp(app, createLiveBackend({ personId: me.personId, displayName: me.displayName, role: me.role }, wake));
+  if (fresh) showWelcomeCard(document.body);
 }
 
 start().catch((e: unknown) => {
