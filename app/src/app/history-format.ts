@@ -99,9 +99,54 @@ export function describeEdit(e: EditRow, personId: string, nameOf: (id: string) 
     id: e.id,
     at: e.at,
     when: formatWhen(e.at),
-    who: e.actor_label === 'seed' ? 'начальное заполнение' : e.actor_label === 'system' || !e.actor_label ? 'система' : e.actor_label,
+    who: e.actor_label === 'seed' ? SEED_LABEL : e.actor_label === 'system' || !e.actor_label ? 'система' : e.actor_label,
     title,
     changes,
     revertable: e.op !== 'update' || changes.length > 0,
+  };
+}
+
+// ---------------------------------------------------------------- авторство карточки
+
+export interface Authorship {
+  /** Кто добавил человека на дерево. */
+  created?: { who: string; when: string };
+  /** Все, кто правил человека или его факты, связи, документы (без начального заполнения). */
+  editors: string[];
+  /** Последняя правка чего-либо в карточке. */
+  last?: { who: string; when: string };
+}
+
+export const SEED_LABEL = 'перенесено при запуске';
+
+export function formatDay(at: string): string {
+  const d = new Date(at);
+  return Number.isNaN(d.getTime()) ? at : `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+/** Имя автора правки: текущая подпись участника, иначе подпись на момент правки; seed — «перенесено при запуске». */
+export function actorName(e: Pick<EditRow, 'actor' | 'actor_label'>, names: Map<string, string>): string {
+  if (e.actor_label === 'seed') return SEED_LABEL;
+  if (e.actor && names.has(e.actor)) return names.get(e.actor)!;
+  if (!e.actor_label || e.actor_label === 'system' || e.actor_label === 'unknown') return 'система';
+  return e.actor_label;
+}
+
+/** Создал, редактировали, последний раз изменил — по истории человека (edits любого порядка). */
+export function authorship(edits: EditRow[], personId: string, names: Map<string, string>): Authorship {
+  const sorted = [...edits].sort((a, b) => a.id - b.id);
+  const isCreate = (e: EditRow) => e.table_name === 'people' && e.row_id === personId && e.op === 'insert';
+  const c = sorted.find(isCreate);
+  const editors: string[] = [];
+  for (const e of sorted) {
+    if (isCreate(e) || e.actor_label === 'seed') continue;
+    const who = actorName(e, names);
+    if (!editors.includes(who)) editors.push(who);
+  }
+  const l = sorted[sorted.length - 1];
+  return {
+    created: c ? { who: actorName(c, names), when: formatDay(c.at) } : undefined,
+    editors,
+    last: l ? { who: actorName(l, names), when: formatDay(l.at) } : undefined,
   };
 }

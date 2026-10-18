@@ -20,7 +20,7 @@ test('сценарий 1: админ создаёт вход родственн�
   if (phone) {
     // Выбор карточки поиском.
     await admin.getByLabel('Чья карточка').fill(target.first);
-    await admin.locator('.admin-pick', { hasText: target.first }).first().click();
+    await admin.locator(`.admin-pick[data-id="${target.id}"]`).click();
   } else {
     // Выбор карточки прямо на дереве.
     await admin.getByRole('button', { name: 'Выбрать на дереве' }).click();
@@ -40,7 +40,7 @@ test('сценарий 1: админ создаёт вход родственн�
 
   // Тёзка: тот же логин для другой карточки — 409 и подсказка с годом рождения; лишнего auth-пользователя нет.
   await admin.getByLabel('Чья карточка').fill('Матвей');
-  await admin.locator('.admin-pick', { hasText: 'Матвей' }).first().click();
+  await admin.locator(`.admin-pick[data-id="${P.matvei}"]`).click();
   await admin.getByLabel('Имя и фамилия для входа').fill(target.login);
   await admin.getByRole('button', { name: 'Создать вход' }).click();
   await expect(admin.locator('.form-error')).toContainText('уже занято');

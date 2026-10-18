@@ -123,6 +123,7 @@ export function createAdminScreen(host: HTMLElement, deps: AdminDeps) {
     for (const p of findPersons(deps.persons(), who.input.value, 6)) {
       const li = h('li');
       const b = btn('', 'admin-pick');
+      b.dataset.id = p.id;
       b.appendChild(h('span', 'admin-pick-name', p.name));
       const d = deps.describe(p.id);
       if (d) b.appendChild(h('span', 'admin-pick-meta', d));

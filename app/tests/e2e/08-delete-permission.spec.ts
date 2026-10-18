@@ -7,7 +7,7 @@ import { service } from './support/stack';
 test('сценарий 8: удаление человека — только админ; восстановить можно', async ({ page }, info) => {
   const s = service();
   const tag = isPhone(info) ? 'Тимофей' : 'Лев';
-  const { data: kid, error } = await s.from('people').insert({ given_name: tag, surname: 'Иванов', patronymic: 'Ильич', sex: 'm', notes: 'Вымышленный, e2e.' }).select('id').single();
+  const { data: kid, error } = await s.from('people').insert({ external_ref: `e2e-${Date.now()}-kid`, given_name: tag, surname: 'Иванов', patronymic: 'Ильич', sex: 'm', notes: 'Вымышленный, e2e.' }).select('id').single();
   if (error) throw error;
   const { error: rErr } = await s.from('relations').insert([
     { kind: 'parent', from_person: P.ilya, to_person: kid.id, parent_type: 'biological' },

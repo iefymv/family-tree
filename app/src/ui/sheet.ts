@@ -359,8 +359,29 @@ export function createSheet(host: HTMLElement, handlers: SheetHandlers): Sheet {
       if (by && (!p.death || dy)) row(p.death ? (she ? 'Прожила' : 'Прожил') : 'Возраст', yearsWord((dy ?? TODAY_YEAR) - by));
       if (p.maidenName) row('Девичья фамилия', p.maidenName);
       row(p.death ? (she ? 'Чем занималась' : 'Чем занимался') : 'Чем занимается', p.occupation ?? 'не указано', !p.occupation);
-      if (p.addedBy) row('Добавил(а) на дерево', p.addedBy);
       body.appendChild(dl);
+
+      // Кто вносил: создатель, все редакторы, последняя правка — видно сразу при открытии.
+      if (p.authorship) {
+        const a = p.authorship;
+        const who = h('dl', 'details authorship');
+        who.setAttribute('aria-label', 'Кто вносил');
+        const arow = (label: string, value: string, cls: string, muted = false) => {
+          const r = h('div', `d-row ${cls}`);
+          r.append(h('dt', '', label), h('dd', muted ? 'muted' : '', value));
+          who.appendChild(r);
+        };
+        arow('Создал(а)', a.created ? `${a.created.who} · ${a.created.when}` : 'неизвестно', 'a-created', !a.created);
+        arow('Редактировали', a.editors.length ? a.editors.join(', ') : 'пока никто', 'a-editors', !a.editors.length);
+        if (a.last) arow('Последний раз изменил(а)', `${a.last.who} · ${a.last.when}`, 'a-last');
+        body.appendChild(who);
+      } else if (p.addedBy) {
+        const fallback = h('dl', 'details authorship');
+        const r = h('div', 'd-row a-created');
+        r.append(h('dt', '', 'Создал(а)'), h('dd', '', p.addedBy));
+        fallback.appendChild(r);
+        body.appendChild(fallback);
+      }
 
       const fSec = section('Интересные факты');
       if (p.facts.length) {

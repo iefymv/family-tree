@@ -29,10 +29,10 @@ test('вкладки целиком видны, текст ≥18px, кнопки
 test('подпись поколения не наезжает на зелёный «+»', async ({ page }) => {
   await login(page, LOGINS.petr, pw('petr'));
   const box = page.getByRole('searchbox', { name: 'Найти родственника' });
-  for (const [q, id] of [['Пётр', P.petr], ['Николай', P.nikolai], ['Илья', P.ilya], ['Ольга', P.olga], ['Матвей', P.matvei]] as const) {
+  for (const [q, id] of [['Пётр Иванов', P.petr], ['Николай Иванов', P.nikolai], ['Илья Иванов', P.ilya], ['Ольга Иванова', P.olga], ['Матвей Иванов', P.matvei]] as const) {
     if (id !== P.petr) {
       await box.fill(q);
-      await page.locator('.search-results button').first().click();
+      await page.locator(`.search-results button[data-id="${id}"]`).click();
       await expect(page.locator(`.card.is-selected[data-id="${id}"]`)).toHaveCount(1);
     }
     await page.waitForTimeout(1600); // перелёт камеры
@@ -52,7 +52,7 @@ test('подпись поколения не наезжает на зелёны�
 
 test('«Неизвестно» отец: фамилия подставляется по фамилии ребёнка', async ({ page }) => {
   const s = service();
-  const { data: kid, error } = await s.from('people').insert({ given_name: 'Злата', surname: 'Берёзкина', sex: 'f', notes: 'Вымышленная, e2e.' }).select('id').single();
+  const { data: kid, error } = await s.from('people').insert({ external_ref: `e2e-${Date.now()}-zlata`, given_name: 'Злата', surname: 'Берёзкина', sex: 'f', notes: 'Вымышленная, e2e.' }).select('id').single();
   if (error) throw error;
   await s.from('relations').insert({ kind: 'parent', from_person: P.olga, to_person: kid.id, parent_type: 'biological' });
   await login(page, LOGINS.olga, pw('olga'));

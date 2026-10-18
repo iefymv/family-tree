@@ -53,54 +53,76 @@ export async function createMember(s: SupabaseClient, personId: string, login: s
 
 export interface Snapshot {
   at: string;
+  /** Строки людей вымышленной семьи из seed.sql. */
   people: Record<string, unknown>[];
+  /** Связи и факты этих людей (их можно мягко удалить в сценариях — вернём). */
   relationIds: string[];
   factIds: string[];
-  documentIds: string[];
 }
 
-/** Снимок: строки людей seed и id всех связей/фактов/документов, существующих до прогона. */
+const inList = (ids: string[]) => `(${ids.join(',')})`;
+
+/**
+ * Снимок ТОЛЬКО вымышленной семьи из seed.sql. В локальной базе может быть и другая (настоящая) семья —
+ * её строки e2e не читает, не меняет и не удаляет.
+ */
 export async function snapshot(s: SupabaseClient): Promise<Snapshot> {
   const at = new Date().toISOString();
   const people = (await check(s.from('people').select('*').in('id', SEED))) as Record<string, unknown>[];
-  const ids = async (t: string) => ((await check(s.from(t).select('id'))) as { id: string }[]).map((r) => r.id);
-  return { at, people, relationIds: await ids('relations'), factIds: await ids('facts'), documentIds: await ids('documents') };
+  const rel = (await check(s.from('relations').select('id, from_person, to_person').or(`from_person.in.${inList(SEED)},to_person.in.${inList(SEED)}`))) as { id: string; from_person: string; to_person: string }[];
+  const facts = (await check(s.from('facts').select('id').in('person_id', SEED))) as { id: string }[];
+  // Связь seed-человека с кем-то вне seed — не наша: в снимок не берём.
+  return { at, people, relationIds: rel.filter((r) => SEED.includes(r.from_person) && SEED.includes(r.to_person)).map((r) => r.id), factIds: facts.map((f) => f.id) };
 }
 
-/** Возвращает базу к снимку: новые строки удаляются, поля людей seed восстанавливаются, история прогона чистится. */
-/** rpcAs — клиент с сессией e2e-админа: soft_delete/restore проверяют is_admin(), у service_role его нет. */
-export async function restore(s: SupabaseClient, snap: Snapshot, rpcAs: SupabaseClient): Promise<void> {
-  const before = { rel: new Set(snap.relationIds), fact: new Set(snap.factIds), doc: new Set(snap.documentIds) };
-  const newIds = async (t: string, keep: Set<string>) => ((await check(s.from(t).select('id'))) as { id: string }[]).map((r) => r.id).filter((id) => !keep.has(id));
-  const newPeople = ((await check(s.from('people').select('id').gte('created_at', snap.at))) as { id: string }[]).map((r) => r.id).filter((id) => !SEED.includes(id));
-  const rel = await newIds('relations', before.rel);
-  const fact = await newIds('facts', before.fact);
-  const docs = (await check(s.from('documents').select('id, storage_path'))) as { id: string; storage_path: string }[];
-  const newDocs = docs.filter((d) => !before.doc.has(d.id));
+/** id участников, чьи входы привязаны к e2e-карточкам (созданы setup или сценарием 1). */
+export async function e2eUserIds(s: SupabaseClient): Promise<string[]> {
+  return ((await check(s.from('members').select('user_id').in('person_id', E2E_PERSONS))) as { user_id: string }[]).map((r) => r.user_id);
+}
 
-  // Сначала отвязать портреты, затем удалить новые строки (service_role может DELETE).
-  await check(s.from('people').update({ portrait_document_id: null }).in('id', [...SEED, ...newPeople]));
-  if (rel.length) await check(s.from('relations').delete().in('id', rel));
-  if (fact.length) await check(s.from('facts').delete().in('id', fact));
-  if (newDocs.length) await check(s.from('documents').delete().in('id', newDocs.map((d) => d.id)));
-  const paths = newDocs.flatMap((d) => [d.storage_path, d.storage_path.replace(/(\.[a-z0-9]+)?$/i, '_thumb.jpg')]);
+/**
+ * Уборка после прогона. Удаляется только то, что доказуемо создал e2e:
+ * строки, автор которых — e2e-участник; люди с external_ref «e2e-…» (их тесты создают секретным ключом)
+ * и всё, что к ним относится. Вымышленная семья seed.sql возвращается к снимку.
+ * rpcAs — клиент e2e-админа: soft_delete/restore проверяют is_admin(), у service_role его нет.
+ */
+export async function restore(s: SupabaseClient, snap: Snapshot, rpcAs: SupabaseClient, users: string[]): Promise<void> {
+  const ids = <T extends { id: string }>(rows: unknown) => (rows as T[]).map((r) => r.id);
+  const byUsers = users.length ? `created_by.in.${inList(users)}` : null;
+  const madePeople = ids(await check(s.from('people').select('id').or([byUsers, 'external_ref.like.e2e-*'].filter(Boolean).join(','))))
+    .filter((id) => !SEED.includes(id));
+  const touch = (col1: string, col2?: string) => madePeople.length ? [`${col1}.in.${inList(madePeople)}`, col2 ? `${col2}.in.${inList(madePeople)}` : null] : [];
+  const relIds = ids(await check(s.from('relations').select('id').or([byUsers, ...touch('from_person', 'to_person')].filter(Boolean).join(',') || 'id.is.null')));
+  const factIds = ids(await check(s.from('facts').select('id').or([byUsers, ...touch('person_id')].filter(Boolean).join(',') || 'id.is.null')));
+  const docs = (await check(s.from('documents').select('id, storage_path').or([users.length ? `uploaded_by.in.${inList(users)}` : null, ...touch('person_id')].filter(Boolean).join(',') || 'id.is.null'))) as { id: string; storage_path: string }[];
+  const docIds = docs.map((d) => d.id);
+
+  // Портреты, указывающие на удаляемые документы, отвязать (только у seed и у созданных e2e людей).
+  if (docIds.length) await check(s.from('people').update({ portrait_document_id: null }).in('id', [...SEED, ...madePeople]).in('portrait_document_id', docIds));
+  if (relIds.length) await check(s.from('relations').delete().in('id', relIds));
+  if (factIds.length) await check(s.from('facts').delete().in('id', factIds));
+  if (docIds.length) await check(s.from('documents').delete().in('id', docIds));
+  const paths = docs.flatMap((d) => [d.storage_path, d.storage_path.replace(/(\.[a-z0-9]+)?$/i, '_thumb.jpg')]);
   if (paths.length) await s.storage.from('documents').remove(paths);
-  if (newPeople.length) {
-    await check(s.from('edits').delete().in('row_id', newPeople));
-    await check(s.from('people').delete().in('id', newPeople));
-  }
+  if (madePeople.length) await check(s.from('people').delete().in('id', madePeople));
 
-  // Люди seed: вернуть поля и мягкое удаление (deleted_at меняется только через RPC — у service_role тоже).
+  // Вымышленная семья seed.sql: поля, мягкое удаление, убранные связи и факты.
   for (const row of snap.people) {
     const { id, created_by: _c, created_at: _a, updated_by: _u, updated_at: _t, deleted_at, ...fields } = row;
     await check(s.from('people').update(fields).eq('id', id as string));
     const cur = (await check(s.from('people').select('deleted_at').eq('id', id as string).single())) as { deleted_at: string | null };
     if (!!cur.deleted_at !== !!deleted_at) await check(rpcAs.rpc(deleted_at ? 'soft_delete' : 'restore', { p_table: 'people', p_id: id }));
   }
-  // Связи и факты seed, которые сценарии убрали, — вернуть.
-  for (const [t, keep] of [['relations', before.rel], ['facts', before.fact]] as const) {
-    const gone = ((await check(s.from(t).select('id').not('deleted_at', 'is', null))) as { id: string }[]).map((r) => r.id).filter((id) => keep.has(id));
+  for (const [t, keep] of [['relations', snap.relationIds], ['facts', snap.factIds]] as const) {
+    if (!keep.length) continue;
+    const gone = ids(await check(s.from(t).select('id').in('id', keep).not('deleted_at', 'is', null)));
     for (const id of gone) await check(rpcAs.rpc('restore', { p_table: t, p_id: id }));
   }
-  await check(s.from('edits').delete().gte('at', snap.at));
+
+  // История: правки e2e-участников, правки удалённых строк и служебные правки восстановления seed за время прогона.
+  const removed = [...madePeople, ...relIds, ...factIds, ...docIds];
+  if (users.length) await check(s.from('edits').delete().in('actor', users));
+  for (let i = 0; i < removed.length; i += 200) await check(s.from('edits').delete().in('row_id', removed.slice(i, i + 200)));
+  const seedRows = [...SEED, ...snap.relationIds, ...snap.factIds];
+  await check(s.from('edits').delete().in('row_id', seedRows).gte('at', snap.at).is('actor', null));
 }

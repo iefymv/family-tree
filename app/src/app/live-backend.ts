@@ -13,7 +13,7 @@ import type { Gender } from '../tree/graph';
 import { layoutParents } from '../tree/mutate';
 import type { AddResult } from '../ui/add-dialog';
 import type { Backend, EditResult, Loaded, MeInfo, PersonForm } from './backend';
-import { describeEdit } from './history-format';
+import { authorship, describeEdit } from './history-format';
 
 const GENDER: Record<PersonRow['sex'], Gender> = { m: 'male', f: 'female', u: 'unknown' };
 const SEX: Record<Gender, PersonRow['sex']> = { male: 'm', female: 'f', unknown: 'u' };
@@ -96,7 +96,7 @@ export function createLiveBackend(me: MeInfo, wake: Wake): Backend {
   }
 
   async function detail(id: string): Promise<Profile | null> {
-    const d = await wake.run(() => getPersonDetail(id));
+    const [d, edits] = await wake.run(() => Promise.all([getPersonDetail(id), history(id)]));
     if (!d) return null;
     rows.set(id, d.person);
     const docs = d.documents;
@@ -104,6 +104,7 @@ export function createLiveBackend(me: MeInfo, wake: Wake): Backend {
     const portrait = docs.find((x) => x.id === d.person.portrait_document_id);
     const prof = profileFromRow(d.person, portrait ? urls.get(portrait.storage_path) : undefined, d.person.created_by ? names.get(d.person.created_by) : undefined);
     prof.facts = d.facts.map((f) => ({ id: f.id, text: [f.value, f.date_text].filter(Boolean).join(', ') || f.kind }));
+    prof.authorship = authorship(edits, id, names);
     prof.docs = docs.map((x: DocumentRow): DocTile => ({
       id: x.id,
       title: x.caption || (IMAGE.test(x.mime ?? '') ? 'Фото' : 'Документ'),

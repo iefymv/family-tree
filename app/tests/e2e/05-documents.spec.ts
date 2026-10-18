@@ -13,6 +13,7 @@ test('сценарий 5: загрузить 3 скана → миниатюры
   await expect(page.locator('.toast')).toContainText('Добавлено документов: 3');
   const tiles = sheet(page).locator('button.doc', { hasText: `${tag}` });
   await expect(tiles).toHaveCount(3);
+  for (const i of [1, 2, 3]) await expect(sheet(page).locator('button.doc', { hasText: `военный билет ${i} ${tag}` })).toHaveCount(1);
   for (let i = 0; i < 3; i++) {
     await expect.poll(() => tiles.nth(i).locator('img.doc-thumb').evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBeGreaterThan(0);
   }
@@ -32,7 +33,7 @@ test('сценарий 5: загрузить 3 скана → миниатюры
     return route.continue();
   });
   const before = signs;
-  await tiles.first().click();
+  await sheet(page).locator('button.doc', { hasText: `военный билет 1 ${tag}` }).click();
   const viewer = page.locator('dialog.viewer[open]');
   await expect(viewer).toBeVisible();
   await expect(viewer.locator('figcaption')).toContainText(`военный билет 1 ${tag}`);

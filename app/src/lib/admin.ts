@@ -31,7 +31,7 @@ async function call<T>(body: Record<string, unknown>): Promise<T> {
   if (error) {
     if (error instanceof FunctionsHttpError) {
       const res = error.context as Response;
-      let msg = 'Не удалось выполнить действие';
+      let msg = res.status >= 500 ? 'Сервер админки сейчас не отвечает. Попробуйте ещё раз через минуту.' : 'Не удалось выполнить действие';
       try {
         msg = ((await res.json()) as { error?: string }).error ?? msg;
       } catch {

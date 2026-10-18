@@ -498,3 +498,6 @@ body.picking .zoom-controls { opacity: 0; pointer-events: none; }
   .admin-head h2 { font-size: 24px; }
 }
 .add-dialog header p { font-size: 18px; }
+.doc.doc-add { font-size: 18px; }
+.authorship { margin-top: 18px; padding: 4px 16px; border-radius: 18px; background: var(--surface-2); }
+.authorship .d-row:last-child { border-bottom: 0; }

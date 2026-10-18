@@ -618,6 +618,7 @@ export async function mountTreeApp(app: HTMLElement, backend: Backend): Promise<
       const li = document.createElement('li');
       const b = document.createElement('button');
       b.type = 'button';
+      b.dataset.id = p.id;
       if (prof) b.appendChild(avatarEl(prof, 'sr-av'));
       const tx = document.createElement('span');
       tx.className = 'sr-text';

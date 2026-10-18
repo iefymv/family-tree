@@ -4,7 +4,7 @@ import { LOGINS, P, pw } from './support/cast';
 import { expectComfortable, isPhone, login, logout, sheet, treeReady } from './support/app';
 import { makePng } from './support/app';
 
-test('сценарий 3: «+» сестра с датой и фото → админ видит «Добавил(а): Пётр»', async ({ page }, info) => {
+test('сценарий 3: «+» сестра с датой и фото → админ видит «Создал(а): Пётр»', async ({ page }, info) => {
   const given = isPhone(info) ? 'Вера' : 'Надежда';
   await login(page, LOGINS.petr, pw('petr'));
 
@@ -38,10 +38,11 @@ test('сценарий 3: «+» сестра с датой и фото → ад�
   await page.reload();
   await treeReady(page);
   await page.getByRole('searchbox', { name: 'Найти родственника' }).fill(given);
-  await page.locator('.search-results button', { hasText: given }).click();
+  await page.locator(`.search-results button[data-id="${newId}"]`).click();
   await expect(page.locator(`.card.is-found[data-id="${newId}"]`)).toBeVisible();
   await page.locator(`.card[data-id="${newId}"]`).click();
-  await expect(sheet(page).locator('.d-row', { hasText: 'Добавил(а) на дерево' })).toContainText('Пётр');
+  await expect(sheet(page).locator('.a-created')).toContainText('Пётр');
+  await expect(sheet(page).locator('.a-last')).toContainText('Пётр'); // последняя правка — его фото
   await expect(sheet(page).locator('.d-row', { hasText: 'Дата рождения' })).toContainText('20–25 мая 1960');
   // Миниатюра действительно загружается.
   const hero = sheet(page).locator('img.hero-img');

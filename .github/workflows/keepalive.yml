@@ -1,0 +1,15 @@
+name: keepalive
+# Бесплатный Supabase засыпает после 7 дней без запросов — пингуем раз в 2 дня.
+on:
+  schedule:
+    - cron: '0 6 */2 * *'
+  workflow_dispatch:
+permissions: {}
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          r=$(curl -sf -X POST "${{ vars.VITE_SUPABASE_URL }}/rest/v1/rpc/ping" \
+            -H "apikey: ${{ vars.VITE_SUPABASE_ANON_KEY }}" -H 'Content-Type: application/json' -d '{}')
+          echo "ping: $r"; [ "$r" = "true" ]

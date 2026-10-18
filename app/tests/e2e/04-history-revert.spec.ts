@@ -18,6 +18,11 @@ test('сценарий 4: правка девичьей фамилии → ис�
   await dlg.getByRole('button', { name: 'Сохранить' }).click();
   await expect(page.locator('.toast')).toContainText('Сохранено');
   await expect(sheet(page).locator('.d-row', { hasText: 'Девичья фамилия' })).toContainText(next);
+  // Авторство в карточке: создатель прежний, правившая — последней.
+  const today = await page.evaluate(() => { const d = new Date(); return `${d.getDate()} ${['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'][d.getMonth()]} ${d.getFullYear()}`; });
+  await expect(sheet(page).locator('.a-created')).toContainText('перенесено при запуске');
+  await expect(sheet(page).locator('.a-last')).toHaveText(`Последний раз изменил(а)Ольга · ${today}`);
+  await expect(sheet(page).locator('.a-editors')).toContainText('Ольга');
 
   await tab(page, 'История');
   const item = sheet(page).locator('.h-item', { hasText: `Петрова → ${next}` });
@@ -39,6 +44,10 @@ test('сценарий 4: правка девичьей фамилии → ис�
   await tab(page, 'Инфо');
   await expect(sheet(page).locator('.d-row', { hasText: 'Девичья фамилия' })).toContainText('Петрова');
   await expect(sheet(page).locator('.d-row', { hasText: 'Девичья фамилия' })).not.toContainText(next);
+  await expect(sheet(page).locator('.a-created')).toContainText('перенесено при запуске');
+  await expect(sheet(page).locator('.a-last')).toContainText('Илья');
+  await expect(sheet(page).locator('.a-editors')).toContainText('Ольга');
+  await expect(sheet(page).locator('.a-editors')).toContainText('Илья');
   await tab(page, 'История');
   const undo = sheet(page).locator('.h-item', { hasText: 'Откат правки' }).first();
   await expect(undo).toContainText(`${next} → Петрова`);

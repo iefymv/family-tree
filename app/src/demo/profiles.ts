@@ -46,6 +46,8 @@ export interface Profile {
   needsCheck?: boolean;
   /** Кто добавил человека на дерево (подпись участника). */
   addedBy?: string;
+  /** Создал, редактировали, последний раз изменил — по истории (только с сервера). */
+  authorship?: { created?: { who: string; when: string }; editors: string[]; last?: { who: string; when: string } };
 }
 
 export const TODAY_YEAR = 2026;
