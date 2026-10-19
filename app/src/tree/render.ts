@@ -18,7 +18,7 @@ function el<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Attrs = {}, par
 }
 
 /** Геометрия узла: круглое фото с тонким кольцом, под ним ФИО и даты. */
-export const NODE = { w: 220, h: 262, photo: 136, ring: 6, photoTop: 8 } as const;
+export const NODE = { w: 244, h: 294, photo: 136, ring: 6, photoTop: 8 } as const;
 const PHOTO_CY = NODE.photoTop + NODE.photo / 2;
 const PHOTO_BOTTOM = NODE.photoTop + NODE.photo;
 const TEXT = {
@@ -28,6 +28,7 @@ const TEXT = {
   surnameFont: '600 20px Onest, system-ui, sans-serif',
   nameFont: '400 18px Onest, system-ui, sans-serif',
   datesFont: '500 18px Onest, system-ui, sans-serif',
+  kinFont: '500 18px Onest, system-ui, sans-serif',
   maxW: NODE.w - 8,
 };
 /** Параметры раскладки под эти узлы. */
@@ -109,6 +110,8 @@ export interface TreeState {
   animate?: boolean;
   /** Первая отрисовка — «волна» появления от «Это вы». */
   intro?: boolean;
+  /** Кем каждый приходится вошедшему (подпись под ФИО и датами); нет записи — нет подписи. */
+  kinship?: Map<string, string>;
 }
 
 export interface TreeHandlers {
@@ -263,7 +266,14 @@ export function createTreeView(host: HTMLElement, handlers: TreeHandlers): TreeV
     });
     const d = datesLine(p);
     if (d) el('text', { class: 'dates', x: cx, y: lines.length > 1 ? TEXT.datesY : TEXT.datesY - 23 }, body).textContent = d;
-    textBottom.set(n.id, d ? (lines.length > 1 ? TEXT.datesY : TEXT.datesY - 23) + 6 : TEXT.nameY[lines.length - 1] + 6);
+    let lastY = d ? (lines.length > 1 ? TEXT.datesY : TEXT.datesY - 23) : TEXT.nameY[lines.length - 1];
+    // Кем приходится вошедшему — отдельной строкой, светлее, тем же размером (не меньше 18px).
+    const rel = n.id === s.rootId ? undefined : s.kinship?.get(n.id);
+    if (rel) {
+      lastY += 27;
+      el('text', { class: 'kin', x: cx, y: lastY }, body).textContent = ellipsize(rel, TEXT.kinFont, TEXT.maxW);
+    }
+    textBottom.set(n.id, lastY + 6);
 
     if (n.id === s.rootId) {
       const b = el('g', { class: 'you-badge', transform: `translate(${cx} ${PHOTO_BOTTOM - 2})` }, body);
@@ -277,7 +287,8 @@ export function createTreeView(host: HTMLElement, handlers: TreeHandlers): TreeV
     const p = s.profiles.get(n.id);
     if (!p) return n.id;
     const d = datesLine(p, TEXT.datesFont, 1e9);
-    return `${fullName(p)}${d ? `, ${d}` : ''}${n.id === s.rootId ? ', это вы' : ''}`;
+    const rel = n.id === s.rootId ? 'это вы' : s.kinship?.get(n.id)?.toLowerCase();
+    return `${fullName(p)}${d ? `, ${d}` : ''}${rel ? `, ${rel}` : ''}`;
   }
 
   // ——— линии ———

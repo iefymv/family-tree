@@ -29,3 +29,6 @@
   /* Пока шторка поднята, сообщение — сверху, чтобы не закрывать кнопки карточки. */
   body.sheet-up .toast { top: calc(12px + env(safe-area-inset-top)); bottom: auto; }
 }
+
+/* Кем приходится вошедшему — строка под ФИО и датами, светлее основного текста. */
+.card .kin { font: 500 18px var(--font); fill: var(--green-700); fill-opacity: 0.82; text-anchor: middle; }

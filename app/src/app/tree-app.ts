@@ -33,6 +33,8 @@ export async function mountTreeApp(app: HTMLElement, backend: Backend): Promise<
   let rootId = profiles.has(backend.me.personId) ? backend.me.personId : family.persons[0]?.id ?? backend.me.personId;
   let layout!: TreeLayout;
   let kin = new Map<string, string>();
+  /** Подписи на карточках — всегда относительно вошедшего; пока он не связан с деревом — без подписей. */
+  let cardKin = new Map<string, string>();
   /** Чья карточка открыта в шторке/панели. */
   let selectedId: string | null = null;
   /** Кто выбран на дереве (обводка, «+» вокруг, «Открыть карточку»). */
@@ -175,6 +177,8 @@ export async function mountTreeApp(app: HTMLElement, backend: Backend): Promise<
     // Своя карточка без связей — рядом с основным деревом, а не внизу среди островов.
     if (join.active() && rootId === backend.me.personId) layout = pinBesideMain(layout, rootId);
     kin = kinshipMap(family, rootId);
+    const me = backend.me.personId;
+    cardKin = profiles.has(me) && !join.active() ? (me === rootId ? kin : kinshipMap(family, me)) : new Map();
     // Минимальный масштаб — чтобы всё дерево целиком помещалось на экран.
     const fit = Math.min(window.innerWidth / (layout.width + 200), window.innerHeight / (layout.height + 300));
     zoomCtl.setExtent(Math.min(0.5, fit), 2.4);
@@ -277,7 +281,7 @@ export async function mountTreeApp(app: HTMLElement, backend: Backend): Promise<
     profiles = d.profiles;
     if (!profiles.has(rootId)) rootId = family.persons[0]?.id ?? rootId;
     relayout();
-    view.update({ family, layout, profiles, rootId, animate: !!fresh, fresh });
+    view.update({ family, layout, profiles, rootId, animate: !!fresh, fresh, kinship: cardKin });
     buildRail();
     updateCount();
     refreshHomeThumb();
@@ -807,7 +811,7 @@ export async function mountTreeApp(app: HTMLElement, backend: Backend): Promise<
     /* шрифт не загрузился — рисуем системным */
   }
   relayout();
-  view.update({ family, layout, profiles, rootId, intro: true });
+  view.update({ family, layout, profiles, rootId, intro: true, kinship: cardKin });
   buildRail();
   updateCount();
   choose(rootId, true);

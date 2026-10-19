@@ -57,3 +57,7 @@ body.sheet-up .share-cta.in-dock, body.picking .share-cta.in-dock { display: non
 @media (max-width: 899px) {
   .share-actions { grid-template-columns: 1fr; }
 }
+@media (max-width: 899px) {
+  /* Над кнопкой «Поделиться», а не поверх неё. */
+  body:not(.sheet-up) .toast { bottom: calc(172px + env(safe-area-inset-bottom)); }
+}
